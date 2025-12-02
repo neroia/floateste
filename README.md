@@ -1,20 +1,39 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Flow - Construtor de Automação WhatsApp
 
-# Run and deploy your AI Studio app
+Construtor visual moderno estilo Typebot/Apple, com integração Gemini AI.
 
-This contains everything you need to run your app locally.
+## Instalação
 
-View your app in AI Studio: https://ai.studio/apps/drive/1INI45TEWOeLDpFCnG-miQGXOp2U7JUIA
+1. Clone o repositório
+2. Instale dependências:
+   ```bash
+   npm install
+   ```
 
-## Run Locally
+## Desenvolvimento (Electron + React)
 
-**Prerequisites:**  Node.js
+Para rodar o app desktop em modo de desenvolvimento (com Hot Reload):
 
+```bash
+npm run electron:dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Isso iniciará:
+- Servidor Vite (Porta 3000)
+- Servidor Backend Local (Porta 8080)
+- Janela do Electron
+
+## Configuração da IA
+
+1. Abra o App
+2. Clique no ícone de Engrenagem
+3. Insira sua `Gemini API Key` (Obtenha em: aistudio.google.com)
+4. Salve
+
+## Build
+
+Para gerar o executável final:
+
+```bash
+npm run electron:build
+```

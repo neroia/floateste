@@ -58,6 +58,7 @@ const FlowEditor = () => {
   const [isSimulatorOpen, setSimulatorOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isBotRunning, setIsBotRunning] = useState(false);
+  const [isLoadingBot, setIsLoadingBot] = useState(false);
   const [botConfig, setBotConfig] = useState<any>(null);
   
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
@@ -102,18 +103,15 @@ const FlowEditor = () => {
       };
 
       setNodes((nds) => nds.concat(newNode));
-      // Optionally select the new node immediately
       setSelectedNodeId(newNode.id);
     },
     [reactFlowInstance, setNodes]
   );
 
-  // Single click handler - Wrapped in useCallback for performance
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
   }, []);
 
-  // Click on background closes the panel - Wrapped in useCallback
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
   }, []);
@@ -130,13 +128,11 @@ const FlowEditor = () => {
   };
 
   const deleteNode = (id: string) => {
-    if (id === 'start-1') return; // Protect start node
+    if (id === 'start-1') return;
     setNodes((nds) => nds.filter((n) => n.id !== id));
     setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
     setSelectedNodeId(null);
   };
-
-  // --- Toolbar Actions ---
 
   const handleExport = () => {
     const flow = { nodes, edges };
@@ -163,7 +159,6 @@ const FlowEditor = () => {
         if (flow.nodes && flow.edges) {
           setNodes(flow.nodes);
           setEdges(flow.edges);
-          // Optional: Reset viewport logic here if needed
         } else {
           alert('Arquivo de fluxo inválido.');
         }
@@ -173,7 +168,6 @@ const FlowEditor = () => {
       }
     };
     reader.readAsText(file);
-    // Reset input so same file can be selected again
     event.target.value = ''; 
   };
 
@@ -182,22 +176,45 @@ const FlowEditor = () => {
     localStorage.setItem('flow_bot_config', JSON.stringify(newConfig));
   };
 
-  const toggleBot = () => {
-    // Basic validation
+  const toggleBot = async () => {
+    // 1. Validar Configuração
     if (!botConfig || !botConfig.apiKey) {
-      alert("Por favor, configure a API do WhatsApp nas configurações antes de iniciar.");
+      alert("Configure a API do WhatsApp (ícone de engrenagem) antes de iniciar.");
       setSettingsOpen(true);
       return;
     }
-    
-    // Simulation of starting the backend process
-    if (!isBotRunning) {
-      // Logic to start...
-      setIsBotRunning(true);
-      // alert("Bot iniciado no ambiente local!");
-    } else {
-      // Logic to stop...
-      setIsBotRunning(false);
+
+    setIsLoadingBot(true);
+    const baseUrl = botConfig.baseUrl || 'http://localhost:8080';
+
+    try {
+      if (!isBotRunning) {
+        // INICIAR
+        const res = await fetch(`${baseUrl}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...botConfig, flowData: { nodes, edges } })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          setIsBotRunning(true);
+        } else {
+          alert("Falha ao iniciar bot: " + data.message);
+        }
+      } else {
+        // PARAR
+        const res = await fetch(`${baseUrl}/stop`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          setIsBotRunning(false);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao conectar com o Servidor Local (Electron). Verifique se o app está rodando corretamente.");
+    } finally {
+      setIsLoadingBot(false);
     }
   };
 
@@ -212,17 +229,16 @@ const FlowEditor = () => {
         {/* Toolbar */}
         <div className="absolute top-4 left-4 right-4 h-16 bg-white/80 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm z-10 flex items-center justify-between px-6 transition-all">
            
-           {/* Left: Status */}
+           {/* Status */}
            <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isBotRunning ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
-                {isBotRunning ? <Loader2 size={14} className="animate-spin" /> : <div className="w-2 h-2 rounded-full bg-current"></div>}
+                {isLoadingBot ? <Loader2 size={14} className="animate-spin" /> : <div className={`w-2 h-2 rounded-full ${isBotRunning ? 'bg-green-500' : 'bg-gray-400'}`}></div>}
                 {isBotRunning ? 'Bot Executando (Local)' : 'Bot Parado'}
              </div>
            </div>
            
-           {/* Right: Actions */}
+           {/* Actions */}
            <div className="flex items-center gap-3">
-             {/* Config Group */}
              <div className="flex items-center bg-gray-100/50 rounded-xl p-1 border border-gray-200/50">
                 <button 
                   onClick={handleImportClick} 
@@ -231,13 +247,7 @@ const FlowEditor = () => {
                 >
                   <Upload size={18} />
                 </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileChange} 
-                  accept=".json" 
-                  className="hidden" 
-                />
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
                 
                 <button 
                   onClick={handleExport} 
@@ -258,7 +268,6 @@ const FlowEditor = () => {
                 </button>
              </div>
              
-             {/* Simulator Button */}
              <button 
                 onClick={() => setSimulatorOpen(true)}
                 className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-gray-700"
@@ -267,18 +276,18 @@ const FlowEditor = () => {
                 <span className="hidden md:inline">Testar</span>
              </button>
 
-             {/* Start/Stop Button */}
              <button 
                 onClick={toggleBot}
+                disabled={isLoadingBot}
                 className={`
-                  flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-md hover:shadow-lg border
+                  flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-md hover:shadow-lg border disabled:opacity-70 disabled:cursor-not-allowed
                   ${isBotRunning 
                     ? 'bg-red-500 hover:bg-red-600 text-white border-red-400' 
                     : 'bg-green-500 hover:bg-green-600 text-white border-green-400'
                   }
                 `}
              >
-                {isBotRunning ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                {isLoadingBot ? <Loader2 size={16} className="animate-spin"/> : (isBotRunning ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />)}
                 <span className="hidden md:inline">{isBotRunning ? 'Parar Bot' : 'Iniciar'}</span>
              </button>
            </div>
