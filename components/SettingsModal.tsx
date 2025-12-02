@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Server, Key, Smartphone, Wifi } from 'lucide-react';
+import { X, Save, Server, Key, Smartphone, Wifi, BrainCircuit } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -13,15 +13,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
     instanceName: '',
     baseUrl: 'http://localhost:8080',
     apiKey: '',
+    geminiApiKey: '', // New field
     webhookUrl: 'http://localhost:3000/webhook',
     phoneNumber: ''
   });
 
   useEffect(() => {
     if (config) {
-      // Filter out removed keys if they exist in old config
-      const { geminiApiKey, ...rest } = config;
-      setLocalConfig(prev => ({ ...prev, ...rest }));
+      setLocalConfig(prev => ({ ...prev, ...config }));
     }
   }, [config, isOpen]);
 
@@ -87,6 +86,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
               </div>
             </div>
           </div>
+
+          <hr className="border-gray-100" />
+
+          {/* Gemini API Section */}
+           <div className="space-y-4">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+              <BrainCircuit size={14} /> Inteligência Artificial (Gemini)
+            </h3>
+            
+            <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Gemini API Key</label>
+                <div className="relative">
+                  <Key size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <input 
+                    type="password" 
+                    value={localConfig.geminiApiKey}
+                    onChange={(e) => handleChange('geminiApiKey', e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    placeholder="Ex: AIzaSy..."
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500">Necessário para Magic Write e respostas de IA.</p>
+            </div>
+           </div>
 
           <hr className="border-gray-100" />
 

@@ -57,7 +57,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
   };
 
   return (
-    <div className="absolute top-4 right-4 w-80 bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] animate-in slide-in-from-right-10 duration-300 z-50">
+    <div className="absolute top-4 right-4 w-80 bg-white/95 backdrop-blur-xl border border-gray-200 rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] animate-in slide-in-from-right-10 duration-150 z-50">
       <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50 rounded-t-2xl">
         <h3 className="font-semibold text-gray-800 flex items-center gap-2">
           {node.type === NodeType.START && <Zap size={16} className="text-yellow-600"/>}

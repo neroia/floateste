@@ -108,15 +108,15 @@ const FlowEditor = () => {
     [reactFlowInstance, setNodes]
   );
 
-  // Single click handler
-  const onNodeClick = (_: React.MouseEvent, node: Node) => {
+  // Single click handler - Wrapped in useCallback for performance
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
-  };
+  }, []);
 
-  // Click on background closes the panel
-  const onPaneClick = () => {
+  // Click on background closes the panel - Wrapped in useCallback
+  const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
-  };
+  }, []);
 
   const updateNodeData = (id: string, newData: any) => {
     setNodes((nds) =>

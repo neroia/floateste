@@ -1,6 +1,6 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
 
 // Configuração
 const PORT = process.env.PORT || 8080;
@@ -37,6 +37,7 @@ app.post('/start', (req, res) => {
   botState.status = 'connecting';
   botState.config = config;
 
+  // Simulação de delay de conexão
   setTimeout(() => {
     botState.status = 'online';
     console.log('Bot conectado com sucesso (Simulado)');
@@ -53,7 +54,7 @@ app.post('/stop', (req, res) => {
   res.json({ success: true, message: 'Bot parado' });
 });
 
-// Endpoint para receber Webhooks (caso necessário testar localmente)
+// Endpoint para receber Webhooks
 app.post('/webhook', (req, res) => {
   console.log('Webhook recebido:', req.body);
   res.sendStatus(200);
@@ -63,9 +64,4 @@ app.post('/webhook', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n🚀 Servidor Local do Flow rodando em http://localhost:${PORT}`);
   console.log(`   Pronto para receber comandos do Electron App.\n`);
-  
-  // Opcional: Avisar ao processo pai (Electron) que estamos prontos
-  if (process.send) {
-    process.send('ready');
-  }
 });

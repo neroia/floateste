@@ -2,14 +2,28 @@ import { GoogleGenAI } from "@google/genai";
 
 // Initialize Gemini Client
 const getClient = () => {
-  // API key must be obtained exclusively from the environment variable process.env.API_KEY
-  const apiKey = process.env.API_KEY;
+  // Priority: 1. User config (localStorage) for Desktop App, 2. Environment Variable for Web/Dev
+  let apiKey = process.env.API_KEY;
+
+  if (typeof window !== 'undefined') {
+    const savedConfig = localStorage.getItem('flow_bot_config');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.geminiApiKey) {
+          apiKey = parsed.geminiApiKey;
+        }
+      } catch (e) {
+        console.error("Failed to parse local config", e);
+      }
+    }
+  }
 
   if (!apiKey) {
-    // In a real env this should be assumed valid, but we return null to handle potential misconfig gracefully in UI logs
-    console.warn("API_KEY not found in environment variables.");
+    console.warn("API_KEY not found in environment variables or local settings.");
     return null;
   }
+  
   return new GoogleGenAI({ apiKey });
 };
 
@@ -19,7 +33,7 @@ export const generateAIResponse = async (
   history: string[] = []
 ): Promise<string> => {
   const ai = getClient();
-  if (!ai) return "Erro: API Key do Gemini não configurada (process.env.API_KEY ausente).";
+  if (!ai) return "Erro: API Key do Gemini não configurada (Settings -> Gemini API).";
 
   try {
     const response = await ai.models.generateContent({
@@ -34,7 +48,7 @@ export const generateAIResponse = async (
     return response.text || "Desculpe, não consegui gerar uma resposta.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Erro ao comunicar com a IA.";
+    return "Erro ao comunicar com a IA (Verifique a Chave API).";
   }
 };
 
