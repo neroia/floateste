@@ -6,7 +6,6 @@ import ReactFlow, {
   Controls,
   Background,
   Connection,
-  ReactFlowProvider,
   Node,
   OnConnect
 } from 'reactflow';
@@ -241,10 +240,14 @@ const FlowEditor = () => {
 
     try {
       if (!isBotRunning) {
+        // IMPORTANT: Sending the current flow state (nodes and edges) to the backend
         const res = await fetch(`${baseUrl}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...botConfig, flowData: { nodes, edges } })
+          body: JSON.stringify({ 
+             ...botConfig, 
+             flowData: { nodes, edges } 
+          })
         });
         const data = await res.json();
         
