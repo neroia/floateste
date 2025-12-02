@@ -1,14 +1,22 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuração
-const PORT = process.env.PORT || 8080;
+const PORT = 3000;
 const app = express();
 
 // Middleware
-app.use(cors()); // Permite que o Frontend (React) fale com esse Backend
+app.use(cors());
 app.use(bodyParser.json());
+
+// --- API ROUTES (Prefix: /api) ---
+const apiRouter = express.Router();
 
 // Estado simulado do Bot
 let botState = {
@@ -17,27 +25,21 @@ let botState = {
   config: {}
 };
 
-// Rotas da API Local
-app.get('/', (req, res) => {
-  res.send('Flow Local Server is Running');
+apiRouter.get('/', (req, res) => {
+  res.send('Flow API is Running');
 });
 
-// Status do Bot
-app.get('/status', (req, res) => {
+apiRouter.get('/status', (req, res) => {
   res.json(botState);
 });
 
-// Iniciar Bot
-app.post('/start', (req, res) => {
+apiRouter.post('/start', (req, res) => {
   const config = req.body;
   console.log('Recebendo comando de iniciar com config:', config);
   
-  // Aqui você integraria com bibliotecas reais como Baileys ou Venom-bot
-  // Simulando processo de conexão...
   botState.status = 'connecting';
   botState.config = config;
 
-  // Simulação de delay de conexão
   setTimeout(() => {
     botState.status = 'online';
     console.log('Bot conectado com sucesso (Simulado)');
@@ -46,22 +48,39 @@ app.post('/start', (req, res) => {
   res.json({ success: true, message: 'Processo de conexão iniciado' });
 });
 
-// Parar Bot
-app.post('/stop', (req, res) => {
+apiRouter.post('/stop', (req, res) => {
   console.log('Parando bot...');
   botState.status = 'offline';
   botState.qrCode = null;
   res.json({ success: true, message: 'Bot parado' });
 });
 
-// Endpoint para receber Webhooks
-app.post('/webhook', (req, res) => {
+apiRouter.post('/webhook', (req, res) => {
   console.log('Webhook recebido:', req.body);
   res.sendStatus(200);
 });
 
+// Mount API Router
+app.use('/api', apiRouter);
+
+// --- FRONTEND ROUTES (Prefix: /painel) ---
+// Serve static files from dist folder (built by Vite)
+const distPath = path.join(__dirname, '../dist');
+app.use('/painel', express.static(distPath));
+
+// SPA Fallback: Return index.html for any unknown route under /painel
+app.get('/painel/*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// Redirect root to /painel
+app.get('/', (req, res) => {
+  res.redirect('/painel');
+});
+
 // Inicia o servidor
 app.listen(PORT, () => {
-  console.log(`\n🚀 Servidor Local do Flow rodando em http://localhost:${PORT}`);
-  console.log(`   Pronto para receber comandos do Electron App.\n`);
+  console.log(`\n🚀 Flow Micro SaaS rodando em:`);
+  console.log(`   Frontend: http://localhost:${PORT}/painel`);
+  console.log(`   API:      http://localhost:${PORT}/api`);
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Server, Key, Smartphone, Wifi, BrainCircuit } from 'lucide-react';
+import { X, Save, Server, Key, Smartphone, BrainCircuit } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,10 +11,10 @@ interface SettingsModalProps {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave }) => {
   const [localConfig, setLocalConfig] = useState({
     instanceName: '',
-    baseUrl: 'http://localhost:8080',
+    baseUrl: '/api', // Default to relative path for Web App
     apiKey: '',
-    geminiApiKey: '', // New field
-    webhookUrl: 'http://localhost:3000/webhook',
+    geminiApiKey: '',
+    webhookUrl: '/api/webhook',
     phoneNumber: ''
   });
 
@@ -43,7 +43,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Configurações do Sistema</h2>
-            <p className="text-xs text-gray-500">Conexão com API Oficial/Local do WhatsApp</p>
+            <p className="text-xs text-gray-500">Conexão API SaaS</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
             <X size={20} />
@@ -61,18 +61,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
             
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">URL da Instância (API)</label>
+                <label className="text-sm font-medium text-gray-700">URL da API</label>
                 <input 
                   type="text" 
                   value={localConfig.baseUrl}
                   onChange={(e) => handleChange('baseUrl', e.target.value)}
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  placeholder="http://localhost:8080"
+                  placeholder="https://api.meusistema.com"
                 />
+                <p className="text-[10px] text-gray-400">Deixe "/api" para usar o servidor interno.</p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">Chave da API (WhatsApp Token)</label>
+                <label className="text-sm font-medium text-gray-700">Chave da API (Token)</label>
                 <div className="relative">
                   <Key size={16} className="absolute left-3 top-3 text-gray-400" />
                   <input 
@@ -80,7 +81,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                     value={localConfig.apiKey}
                     onChange={(e) => handleChange('apiKey', e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Ex: secret_key_123"
+                    placeholder="Token de acesso"
                   />
                 </div>
               </div>
@@ -104,10 +105,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                     value={localConfig.geminiApiKey}
                     onChange={(e) => handleChange('geminiApiKey', e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Ex: AIzaSy..."
+                    placeholder="AIzaSy..."
                   />
                 </div>
-                <p className="text-[10px] text-gray-500">Necessário para Magic Write e respostas de IA.</p>
             </div>
            </div>
 
@@ -136,19 +136,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                     value={localConfig.webhookUrl}
                     onChange={(e) => handleChange('webhookUrl', e.target.value)}
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-all"
-                    placeholder="/webhook"
+                    placeholder="/api/webhook"
                   />
                 </div>
-             </div>
-          </div>
-
-          <div className="bg-blue-50 p-3 rounded-lg flex items-start gap-3">
-             <Wifi size={18} className="text-blue-600 mt-0.5" />
-             <div>
-                <h4 className="text-xs font-bold text-blue-800">Modo Local (Electron)</h4>
-                <p className="text-[11px] text-blue-600 leading-relaxed">
-                  As chaves são salvas apenas no seu computador. Ao iniciar o bot, um servidor local Node.js será utilizado.
-                </p>
              </div>
           </div>
 
@@ -166,7 +156,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
             onClick={handleSave}
             className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-200 transition-all active:scale-95 flex items-center gap-2"
           >
-            <Save size={16} /> Salvar Configuração
+            <Save size={16} /> Salvar
           </button>
         </div>
 

@@ -3,10 +3,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './', // Essencial para o Electron carregar assets em produção (file://)
+  base: '/painel/', // Serves the app under http://localhost:3000/painel/
   server: {
-    port: 3000,
-    strictPort: true, // Falha se a porta estiver ocupada em vez de trocar
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   },
   build: {
     outDir: 'dist',

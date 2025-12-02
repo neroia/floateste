@@ -185,7 +185,8 @@ const FlowEditor = () => {
     }
 
     setIsLoadingBot(true);
-    const baseUrl = botConfig.baseUrl || 'http://localhost:8080';
+    // Use relative /api path if baseUrl is not absolute, or default to /api
+    const baseUrl = botConfig.baseUrl || '/api';
 
     try {
       if (!isBotRunning) {
@@ -212,7 +213,7 @@ const FlowEditor = () => {
       }
     } catch (error) {
       console.error(error);
-      alert("Erro ao conectar com o Servidor Local (Electron). Verifique se o app está rodando corretamente.");
+      alert("Erro ao conectar com o Servidor. Verifique se a aplicação está rodando.");
     } finally {
       setIsLoadingBot(false);
     }
@@ -233,7 +234,7 @@ const FlowEditor = () => {
            <div className="flex items-center gap-3 text-sm font-medium text-gray-600">
              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isBotRunning ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-100 border-gray-200 text-gray-500'}`}>
                 {isLoadingBot ? <Loader2 size={14} className="animate-spin" /> : <div className={`w-2 h-2 rounded-full ${isBotRunning ? 'bg-green-500' : 'bg-gray-400'}`}></div>}
-                {isBotRunning ? 'Bot Executando (Local)' : 'Bot Parado'}
+                {isBotRunning ? 'Bot Online' : 'Bot Offline'}
              </div>
            </div>
            
