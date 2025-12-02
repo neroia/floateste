@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Server, Key, Smartphone, BrainCircuit } from 'lucide-react';
+import { X, Save, Server, Key, Smartphone, BrainCircuit, ShieldCheck, Hash } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,12 +10,11 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave }) => {
   const [localConfig, setLocalConfig] = useState({
-    instanceName: '',
-    baseUrl: '/api', // Default to relative path for Web App
-    apiKey: '',
+    phoneNumberId: '',
+    accessToken: '',
     geminiApiKey: '',
     webhookUrl: '/api/webhook',
-    phoneNumber: ''
+    instanceName: 'My WhatsApp Bot'
   });
 
   useEffect(() => {
@@ -42,8 +41,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Configurações do Sistema</h2>
-            <p className="text-xs text-gray-500">Conexão API SaaS</p>
+            <h2 className="text-lg font-bold text-gray-800">Configurações</h2>
+            <p className="text-xs text-gray-500">API Oficial do WhatsApp (Meta)</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
             <X size={20} />
@@ -56,32 +55,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
           {/* WhatsApp API Section */}
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Server size={14} /> Servidor WhatsApp
+              <Server size={14} /> Credenciais Meta Cloud API
             </h3>
             
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">URL da API</label>
-                <input 
-                  type="text" 
-                  value={localConfig.baseUrl}
-                  onChange={(e) => handleChange('baseUrl', e.target.value)}
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  placeholder="https://api.meusistema.com"
-                />
-                <p className="text-[10px] text-gray-400">Deixe "/api" para usar o servidor interno.</p>
+                <label className="text-sm font-medium text-gray-700">Phone Number ID</label>
+                <div className="relative">
+                  <Hash size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <input 
+                    type="text" 
+                    value={localConfig.phoneNumberId}
+                    onChange={(e) => handleChange('phoneNumberId', e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    placeholder="Ex: 105555222222222"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400">Encontrado no painel do Meta Developers.</p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">Chave da API (Token)</label>
+                <label className="text-sm font-medium text-gray-700">Access Token (Permanente ou Temp)</label>
                 <div className="relative">
-                  <Key size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <ShieldCheck size={16} className="absolute left-3 top-3 text-gray-400" />
                   <input 
                     type="password" 
-                    value={localConfig.apiKey}
-                    onChange={(e) => handleChange('apiKey', e.target.value)}
+                    value={localConfig.accessToken}
+                    onChange={(e) => handleChange('accessToken', e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Token de acesso"
+                    placeholder="EAAG..."
                   />
                 </div>
               </div>
@@ -116,28 +118,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
           {/* Bot Config Section */}
           <div className="space-y-4">
              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Smartphone size={14} /> Dados do Bot
+              <Smartphone size={14} /> Integração
             </h3>
-             <div className="grid grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Nome da Sessão</label>
-                  <input 
-                    type="text" 
-                    value={localConfig.instanceName}
-                    onChange={(e) => handleChange('instanceName', e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-all"
-                    placeholder="flow_bot_01"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Webhook URL</label>
-                  <input 
-                    type="text" 
-                    value={localConfig.webhookUrl}
-                    onChange={(e) => handleChange('webhookUrl', e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-all"
-                    placeholder="/api/webhook"
-                  />
+                  <label className="text-sm font-medium text-gray-700">Webhook URL (Para colar no Meta)</label>
+                  <div className="flex gap-2">
+                     <input 
+                        type="text" 
+                        readOnly
+                        value={window.location.origin + '/api/webhook'}
+                        className="w-full px-3 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm outline-none text-gray-500"
+                      />
+                  </div>
+                  <p className="text-[10px] text-gray-400">Verify Token: <code>flow_token_secret</code></p>
                 </div>
              </div>
           </div>

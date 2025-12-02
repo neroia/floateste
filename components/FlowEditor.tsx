@@ -6,7 +6,6 @@ import ReactFlow, {
   Controls,
   Background,
   Connection,
-  Edge,
   ReactFlowProvider,
   Node,
   OnConnect
@@ -17,7 +16,7 @@ import PropertiesPanel from './PropertiesPanel';
 import Simulator from './Simulator';
 import SettingsModal from './SettingsModal';
 import { FlowNode, NodeType, NodeData } from '../types';
-import { Play, Download, Upload, Smartphone, Settings, Square, Loader2 } from 'lucide-react';
+import { Play, Download, Upload, Smartphone, Settings, Square, Loader2, Send } from 'lucide-react';
 
 const nodeTypes = {
   [NodeType.START]: CustomNode,
@@ -60,6 +59,11 @@ const FlowEditor = () => {
   const [isBotRunning, setIsBotRunning] = useState(false);
   const [isLoadingBot, setIsLoadingBot] = useState(false);
   const [botConfig, setBotConfig] = useState<any>(null);
+  
+  // Manual Trigger State
+  const [isTestModalOpen, setTestModalOpen] = useState(false);
+  const [testPhoneNumber, setTestPhoneNumber] = useState('');
+  const [isSendingTest, setIsSendingTest] = useState(false);
   
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
@@ -176,21 +180,67 @@ const FlowEditor = () => {
     localStorage.setItem('flow_bot_config', JSON.stringify(newConfig));
   };
 
+  const handleManualTrigger = async () => {
+     if (!testPhoneNumber) {
+       alert("Digite um número de telefone (Ex: 551199999999)");
+       return;
+     }
+     
+     if (!botConfig || !botConfig.phoneNumberId || !botConfig.accessToken) {
+       alert("Configure as credenciais do WhatsApp na engrenagem antes de enviar.");
+       setSettingsOpen(true);
+       return;
+     }
+
+     // Find the first message node connected to Start
+     const startEdge = edges.find(e => e.source === 'start-1');
+     if (!startEdge) {
+       alert("Conecte o bloco 'Início' a uma 'Mensagem' para testar.");
+       return;
+     }
+     const firstNode = nodes.find(n => n.id === startEdge.target);
+     if (!firstNode) return;
+
+     const messageContent = firstNode.data.content || "Olá! Teste do Flow.";
+
+     setIsSendingTest(true);
+     try {
+       const res = await fetch('/api/send-message', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           to: testPhoneNumber,
+           message: messageContent,
+           config: botConfig
+         })
+       });
+       
+       const data = await res.json();
+       if (data.success) {
+         alert(`✅ Mensagem enviada com sucesso! ID: ${data.messageId}`);
+         setTestModalOpen(false);
+       } else {
+         alert(`❌ Erro ao enviar: ${JSON.stringify(data.error)}`);
+       }
+     } catch (e) {
+       alert("Erro de conexão com o servidor.");
+     } finally {
+       setIsSendingTest(false);
+     }
+  };
+
   const toggleBot = async () => {
-    // 1. Validar Configuração
-    if (!botConfig || !botConfig.apiKey) {
+    if (!botConfig || !botConfig.phoneNumberId) {
       alert("Configure a API do WhatsApp (ícone de engrenagem) antes de iniciar.");
       setSettingsOpen(true);
       return;
     }
 
     setIsLoadingBot(true);
-    // Use relative /api path if baseUrl is not absolute, or default to /api
-    const baseUrl = botConfig.baseUrl || '/api';
+    const baseUrl = '/api';
 
     try {
       if (!isBotRunning) {
-        // INICIAR
         const res = await fetch(`${baseUrl}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -204,7 +254,6 @@ const FlowEditor = () => {
           alert("Falha ao iniciar bot: " + data.message);
         }
       } else {
-        // PARAR
         const res = await fetch(`${baseUrl}/stop`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
@@ -262,7 +311,7 @@ const FlowEditor = () => {
 
                 <button 
                   onClick={() => setSettingsOpen(true)} 
-                  className={`p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow ${!botConfig?.apiKey ? 'text-orange-500 animate-pulse' : ''}`}
+                  className={`p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow ${!botConfig?.accessToken ? 'text-orange-500 animate-pulse' : ''}`}
                   title="Configurações da API"
                 >
                   <Settings size={18} />
@@ -270,11 +319,19 @@ const FlowEditor = () => {
              </div>
              
              <button 
+                onClick={() => setTestModalOpen(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-blue-500"
+             >
+                <Send size={16} />
+                <span className="hidden md:inline">Disparo Manual</span>
+             </button>
+
+             <button 
                 onClick={() => setSimulatorOpen(true)}
                 className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-gray-700"
              >
                 <Smartphone size={16} />
-                <span className="hidden md:inline">Testar</span>
+                <span className="hidden md:inline">Simulador</span>
              </button>
 
              <button 
@@ -289,7 +346,7 @@ const FlowEditor = () => {
                 `}
              >
                 {isLoadingBot ? <Loader2 size={16} className="animate-spin"/> : (isBotRunning ? <Square size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />)}
-                <span className="hidden md:inline">{isBotRunning ? 'Parar Bot' : 'Iniciar'}</span>
+                <span className="hidden md:inline">{isBotRunning ? 'Parar' : 'Iniciar'}</span>
              </button>
            </div>
         </div>
@@ -329,6 +386,46 @@ const FlowEditor = () => {
           edges={edges} 
           onClose={() => setSimulatorOpen(false)} 
         />
+      )}
+
+      {/* Manual Trigger Modal */}
+      {isTestModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center animate-in fade-in">
+           <div className="bg-white rounded-2xl p-6 w-[400px] shadow-2xl">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Teste de Disparo Real</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Isso enviará a primeira mensagem do fluxo para o número abaixo usando a API Oficial configurada.
+              </p>
+              
+              <div className="space-y-2 mb-6">
+                <label className="text-xs font-bold text-gray-500 uppercase">Número do Destinatário</label>
+                <input 
+                  type="text" 
+                  value={testPhoneNumber}
+                  onChange={(e) => setTestPhoneNumber(e.target.value)}
+                  placeholder="5511999999999"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setTestModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleManualTrigger}
+                  disabled={isSendingTest}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-70 flex items-center gap-2"
+                >
+                  {isSendingTest && <Loader2 size={16} className="animate-spin" />}
+                  Enviar Teste
+                </button>
+              </div>
+           </div>
+        </div>
       )}
 
       <SettingsModal 
