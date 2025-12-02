@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Server, Key, Smartphone, BrainCircuit, ShieldCheck, Hash } from 'lucide-react';
+import { X, Save, Server, Key, Smartphone, BrainCircuit, ShieldCheck, Wifi } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,11 +10,11 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, onSave }) => {
   const [localConfig, setLocalConfig] = useState({
-    phoneNumberId: '',
-    accessToken: '',
+    evolutionUrl: 'http://localhost:8081',
+    evolutionApiKey: '',
+    instanceName: 'my_instance',
     geminiApiKey: '',
-    webhookUrl: '/api/webhook',
-    instanceName: 'My WhatsApp Bot'
+    webhookUrl: '/api/webhook'
   });
 
   useEffect(() => {
@@ -30,7 +30,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
   };
 
   const handleSave = () => {
-    onSave(localConfig);
+    // Remove trailing slash from URL if present
+    const cleanUrl = localConfig.evolutionUrl.replace(/\/$/, "");
+    onSave({ ...localConfig, evolutionUrl: cleanUrl });
     onClose();
   };
 
@@ -42,7 +44,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
             <h2 className="text-lg font-bold text-gray-800">Configurações</h2>
-            <p className="text-xs text-gray-500">API Oficial do WhatsApp (Meta)</p>
+            <p className="text-xs text-gray-500">Integração Evolution API (Local)</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors">
             <X size={20} />
@@ -52,38 +54,52 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
         {/* Body */}
         <div className="p-6 space-y-6">
           
-          {/* WhatsApp API Section */}
+          {/* Evolution API Section */}
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Server size={14} /> Credenciais Meta Cloud API
+              <Server size={14} /> Dados da Evolution API
             </h3>
             
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">Phone Number ID</label>
+                <label className="text-sm font-medium text-gray-700">URL da API (Base URL)</label>
                 <div className="relative">
-                  <Hash size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <Wifi size={16} className="absolute left-3 top-3 text-gray-400" />
                   <input 
                     type="text" 
-                    value={localConfig.phoneNumberId}
-                    onChange={(e) => handleChange('phoneNumberId', e.target.value)}
+                    value={localConfig.evolutionUrl}
+                    onChange={(e) => handleChange('evolutionUrl', e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Ex: 105555222222222"
+                    placeholder="http://localhost:8081"
                   />
                 </div>
-                <p className="text-[10px] text-gray-400">Encontrado no painel do Meta Developers.</p>
+                <p className="text-[10px] text-gray-400">Endereço onde a Evolution API está rodando.</p>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">Access Token (Permanente ou Temp)</label>
+                <label className="text-sm font-medium text-gray-700">Global API Key</label>
                 <div className="relative">
                   <ShieldCheck size={16} className="absolute left-3 top-3 text-gray-400" />
                   <input 
                     type="password" 
-                    value={localConfig.accessToken}
-                    onChange={(e) => handleChange('accessToken', e.target.value)}
+                    value={localConfig.evolutionApiKey}
+                    onChange={(e) => handleChange('evolutionApiKey', e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                    placeholder="EAAG..."
+                    placeholder="Sua chave global definida no env da Evolution"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Nome da Instância</label>
+                <div className="relative">
+                  <Smartphone size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <input 
+                    type="text" 
+                    value={localConfig.instanceName}
+                    onChange={(e) => handleChange('instanceName', e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    placeholder="Ex: atendimento_01"
                   />
                 </div>
               </div>
@@ -118,11 +134,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
           {/* Bot Config Section */}
           <div className="space-y-4">
              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-              <Smartphone size={14} /> Integração
+              <Server size={14} /> Webhook Local
             </h3>
              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Webhook URL (Para colar no Meta)</label>
+                  <label className="text-sm font-medium text-gray-700">Webhook URL (Configure na Evolution)</label>
                   <div className="flex gap-2">
                      <input 
                         type="text" 
@@ -131,7 +147,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, config, 
                         className="w-full px-3 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-sm outline-none text-gray-500"
                       />
                   </div>
-                  <p className="text-[10px] text-gray-400">Verify Token: <code>flow_token_secret</code></p>
+                  <p className="text-[10px] text-gray-400">Ative os eventos <code>MESSAGES_UPSERT</code> na sua instância.</p>
                 </div>
              </div>
           </div>
