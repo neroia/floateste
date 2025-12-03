@@ -1,169 +1,197 @@
-import fetch from 'node-fetch';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
-// Helper to validate config for Evolution API
-const validateConfig = (config) => {
-  if (!config || !config.evolutionUrl || !config.evolutionApiKey || !config.instanceName) {
-    console.error('❌ Configuração da Evolution API incompleta.');
-    return false;
-  }
-  return true;
-};
+import pino from 'pino';
+import QRCode from 'qrcode';
+import fs from 'fs';
+import path from 'path';
 
-// Formata headers padrão da Evolution
-const getHeaders = (config) => ({
-  'Content-Type': 'application/json',
-  'apikey': config.evolutionApiKey
-});
+// Estado global da conexão
+let sock = null;
+let qrCodeUrl = null;
+let connectionStatus = 'close'; // 'open', 'connecting', 'close'
+let messageHandler = null; // Função de callback para quando chegar mensagem
 
-// Enviar mensagem de texto
-export async function sendTextMessage(to, text, config) {
-  if (!validateConfig(config)) return { success: false, error: 'Configuração inválida' };
+// Helper para verificar status externamente
+export function isConnected() {
+  return connectionStatus === 'open';
+}
 
-  const url = `${config.evolutionUrl}/message/sendText/${config.instanceName}`;
-  
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: getHeaders(config),
-      body: JSON.stringify({
-        number: to, // Evolution usa 'number' (ex: 551199999999)
-        options: {
-          delay: 1200,
-          presence: "composing",
-          linkPreview: false
-        },
-        textMessage: {
-          text: text
-        }
-      })
-    });
+// Função para iniciar o WhatsApp
+export async function startWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    const data = await response.json();
-    
-    // Verifica sucesso (Evolution pode retornar status: 201 ou errors)
-    if (response.status !== 201 && response.status !== 200) {
-       console.error('❌ Erro Evolution API:', JSON.stringify(data, null, 2));
-       return { success: false, error: data };
+  sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true, // Mostra no terminal também para debug
+    logger: pino({ level: 'silent' }), // Logs limpos
+    browser: ["Flow Builder", "Chrome", "1.0.0"],
+    connectTimeoutMs: 60000,
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      // Converte o código QR puro em uma URL de imagem (Data URI) para o frontend
+      qrCodeUrl = await QRCode.toDataURL(qr);
+      connectionStatus = 'connecting';
     }
-    
-    console.log('✅ Mensagem enviada (Evolution).');
-    return { success: true, data };
-    
+
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+      connectionStatus = 'close';
+      qrCodeUrl = null;
+      
+      console.log(`Conexão fechada. Reconectar? ${shouldReconnect}`);
+      
+      if (shouldReconnect) {
+        // Delay de 5 segundos para evitar loop infinito rápido
+        setTimeout(() => {
+          startWhatsApp(); 
+        }, 5000);
+      } else {
+        console.log('Desconectado. Delete a pasta auth_info_baileys para gerar novo QR.');
+        // Opcional: limpar pasta automaticamente
+        // fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+      }
+    } else if (connection === 'open') {
+      console.log('✅ WhatsApp Conectado!');
+      connectionStatus = 'open';
+      qrCodeUrl = null;
+    }
+  });
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type === 'notify') {
+      for (const msg of messages) {
+        if (!msg.key.fromMe && messageHandler) {
+           messageHandler(msg);
+        }
+      }
+    }
+  });
+}
+
+// Configura quem vai processar as mensagens (o index.js)
+export function setMessageHandler(handler) {
+  messageHandler = handler;
+}
+
+// Retorna status e QR para o frontend
+export function getStatusData() {
+  return {
+    status: connectionStatus,
+    qrCode: qrCodeUrl
+  };
+}
+
+// Forçar desconexão
+export async function logout() {
+  try {
+    if (sock) {
+      await sock.logout();
+      sock = null;
+      connectionStatus = 'close';
+      qrCodeUrl = null;
+      // Opcional: Apagar a pasta auth_info_baileys para limpar sessão
+      try {
+        fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+      } catch (err) {
+        console.error("Erro ao limpar pasta auth", err);
+      }
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// --- FUNÇÕES DE ENVIO ---
+
+export async function sendTextMessage(to, text) {
+  if (!sock) return { success: false, error: 'WhatsApp desconectado' };
+  
+  // Baileys usa formato JID (ex: 551199999999@s.whatsapp.net)
+  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+
+  try {
+    await sock.sendMessage(id, { text: text });
+    return { success: true };
   } catch (error) {
-    console.error('❌ Erro na requisição (Evolution):', error);
+    console.error('Erro envio texto:', error);
     return { success: false, error: error.message };
   }
 }
 
-// Enviar imagem
-export async function sendImageMessage(to, imageUrl, caption = '', config) {
-  if (!validateConfig(config)) return { success: false, error: 'Configuração inválida' };
-
-  const url = `${config.evolutionUrl}/message/sendMedia/${config.instanceName}`;
-
+export async function sendImageMessage(to, imageUrl, caption = '') {
+  if (!sock) return { success: false };
+  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+  
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: getHeaders(config),
-      body: JSON.stringify({
-        number: to,
-        options: {
-          delay: 1200,
-          presence: "composing"
-        },
-        mediaMessage: {
-          mediatype: "image",
-          caption: caption,
-          media: imageUrl // URL da imagem
-        }
-      })
+    await sock.sendMessage(id, { 
+      image: { url: imageUrl }, 
+      caption: caption 
     });
-
-    return await response.json();
+    return { success: true };
   } catch (error) {
-    console.error('Erro ao enviar imagem (Evolution):', error);
-    return null;
+    return { success: false };
   }
 }
 
-// Enviar botões
-// Nota: O suporte a botões nativos varia. Evolution usa lista ou botões dependendo da versão.
-// Vamos usar o formato padrão da Evolution v2.
-export async function sendButtonMessage(to, text, buttons, config) {
-  if (!validateConfig(config)) return { success: false, error: 'Configuração inválida' };
-
-  // Nota: Botões simples (Quick Reply)
-  const url = `${config.evolutionUrl}/message/sendButtons/${config.instanceName}`;
-
-  const formattedButtons = buttons.map((btn, idx) => ({
-      type: "reply",
-      displayText: btn.label,
-      id: btn.id || `btn_${idx}`
+export async function sendButtonMessage(to, text, buttons) {
+  if (!sock) return { success: false };
+  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+  
+  const buttonsPayload = buttons.map((b, idx) => ({
+    buttonId: b.id || `id-${idx}`, 
+    buttonText: { displayText: b.label }, 
+    type: 1 
   }));
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: getHeaders(config),
-      body: JSON.stringify({
-        number: to,
-        options: {
-          delay: 1200,
-          presence: "composing"
-        },
-        buttonMessage: {
-            title: "Opções",
-            description: text,
-            buttons: formattedButtons
-        }
-      })
+    await sock.sendMessage(id, {
+      text: text,
+      footer: 'Flow Bot',
+      buttons: buttonsPayload,
+      headerType: 1
     });
-
-    return await response.json();
+    return { success: true };
   } catch (error) {
-    console.error('Erro ao enviar botões (Evolution):', error);
-    return null;
+    console.error("Erro botões:", error);
+    // Fallback para texto
+    const fallbackText = `${text}\n\n${buttons.map(b => `[ ${b.label} ]`).join('\n')}`;
+    await sock.sendMessage(id, { text: fallbackText });
+    return { success: true };
   }
 }
 
-// Enviar lista
-export async function sendListMessage(to, text, buttonText, sections, config) {
-  if (!validateConfig(config)) return { success: false, error: 'Configuração inválida' };
+export async function sendListMessage(to, text, buttonText, sections) {
+    if (!sock) return { success: false };
+    const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
 
-  const url = `${config.evolutionUrl}/message/sendList/${config.instanceName}`;
-
-  // Formata seções para Evolution
-  const evolutionSections = [{
-      title: "Opções Disponíveis",
-      rows: sections.map((opt, idx) => ({
-          title: opt.label,
-          description: opt.description || "",
-          rowId: opt.id || `opt_${idx}`
+    const sectionsPayload = [{
+      title: "Opções",
+      rows: sections.map((s, idx) => ({
+        title: s.label,
+        rowId: s.id || `id-${idx}`,
+        description: s.description || ""
       }))
-  }];
+    }];
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: getHeaders(config),
-      body: JSON.stringify({
-        number: to,
-        options: {
-          delay: 1200,
-          presence: "composing"
-        },
-        listMessage: {
-            title: "Menu",
-            description: text,
-            buttonText: buttonText || "Ver Opções",
-            sections: evolutionSections
-        }
-      })
-    });
-
-    return await response.json();
-  } catch (error) {
-    console.error('Erro ao enviar lista (Evolution):', error);
-    return null;
-  }
+    try {
+      await sock.sendMessage(id, {
+        text: text,
+        buttonText: buttonText || "Ver Opções",
+        sections: sectionsPayload
+      });
+      return { success: true };
+    } catch (e) {
+      const fallbackText = `${text}\n\n${sections.map(s => `* ${s.label}`).join('\n')}`;
+      await sock.sendMessage(id, { text: fallbackText });
+      return { success: true };
+    }
 }

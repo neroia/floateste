@@ -184,12 +184,6 @@ const FlowEditor = () => {
        alert("Digite um número de telefone (Ex: 551199999999)");
        return;
      }
-     
-     if (!botConfig || !botConfig.phoneNumberId || !botConfig.accessToken) {
-       alert("Configure as credenciais do WhatsApp na engrenagem antes de enviar.");
-       setSettingsOpen(true);
-       return;
-     }
 
      // Find the first message node connected to Start
      const startEdge = edges.find(e => e.source === 'start-1');
@@ -216,10 +210,10 @@ const FlowEditor = () => {
        
        const data = await res.json();
        if (data.success) {
-         alert(`✅ Mensagem enviada com sucesso! ID: ${data.messageId}`);
+         alert(`✅ Mensagem enviada com sucesso!`);
          setTestModalOpen(false);
        } else {
-         alert(`❌ Erro ao enviar: ${JSON.stringify(data.error)}`);
+         alert(`❌ Erro ao enviar: ${data.error || 'Verifique se o WhatsApp está conectado.'}`);
        }
      } catch (e) {
        alert("Erro de conexão com o servidor.");
@@ -229,17 +223,22 @@ const FlowEditor = () => {
   };
 
   const toggleBot = async () => {
-    if (!botConfig || !botConfig.phoneNumberId) {
-      alert("Configure a API do WhatsApp (ícone de engrenagem) antes de iniciar.");
-      setSettingsOpen(true);
-      return;
-    }
-
     setIsLoadingBot(true);
     const baseUrl = '/api';
 
     try {
       if (!isBotRunning) {
+        // Verificar status antes de iniciar
+        const statusRes = await fetch(`${baseUrl}/whatsapp/status`);
+        const statusData = await statusRes.json();
+        
+        if (statusData.status !== 'open') {
+           alert("WhatsApp não conectado! Abra a engrenagem e conecte o QR Code antes de iniciar.");
+           setSettingsOpen(true);
+           setIsLoadingBot(false);
+           return;
+        }
+
         // IMPORTANT: Sending the current flow state (nodes and edges) to the backend
         const res = await fetch(`${baseUrl}/start`, {
           method: 'POST',
@@ -314,7 +313,7 @@ const FlowEditor = () => {
 
                 <button 
                   onClick={() => setSettingsOpen(true)} 
-                  className={`p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow ${!botConfig?.accessToken ? 'text-orange-500 animate-pulse' : ''}`}
+                  className={`p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow`}
                   title="Configurações da API"
                 >
                   <Settings size={18} />
@@ -397,7 +396,7 @@ const FlowEditor = () => {
            <div className="bg-white rounded-2xl p-6 w-[400px] shadow-2xl">
               <h3 className="text-lg font-bold text-gray-800 mb-4">Teste de Disparo Real</h3>
               <p className="text-sm text-gray-500 mb-4">
-                Isso enviará a primeira mensagem do fluxo para o número abaixo usando a API Oficial configurada.
+                Isso enviará a primeira mensagem do fluxo para o número abaixo usando a conexão atual do WhatsApp.
               </p>
               
               <div className="space-y-2 mb-6">

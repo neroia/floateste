@@ -4,24 +4,34 @@ import bodyParser from 'body-parser';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { sendTextMessage, sendButtonMessage, sendListMessage, sendImageMessage } from './whatsappService.js';
+import { 
+  startWhatsApp, 
+  setMessageHandler, 
+  getStatusData, 
+  logout,
+  sendTextMessage, 
+  sendButtonMessage, 
+  sendListMessage, 
+  sendImageMessage,
+  isConnected 
+} from './whatsappService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuração
 const PORT = 3000;
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// --- IN-MEMORY STORAGE ---
+// --- INICIALIZAÇÃO DO WHATSAPP LOCAL ---
+startWhatsApp(); // Inicia o socket do Baileys
+
+// --- ESTADO DO FLUXO ---
 let activeFlow = {
   isRunning: false,
-  config: null,
   nodes: [],
   edges: []
 };
@@ -29,12 +39,9 @@ let activeFlow = {
 const userSessions = {};
 
 // --- HELPER FUNCTIONS ---
-
-const cleanPhoneNumber = (phone) => {
-  if (!phone) return '';
-  // Evolution envia com @s.whatsapp.net, removemos
-  let p = phone.replace('@s.whatsapp.net', '');
-  return p.replace(/\D/g, '');
+const cleanPhoneNumber = (jid) => {
+  if (!jid) return '';
+  return jid.replace('@s.whatsapp.net', '').split(':')[0];
 };
 
 const replaceVariables = (text, variables) => {
@@ -44,7 +51,6 @@ const replaceVariables = (text, variables) => {
 
 const getNextNode = (currentNodeId, sourceHandle = null) => {
   const edges = activeFlow.edges;
-  
   if (sourceHandle) {
     const edge = edges.find(e => e.source === currentNodeId && e.sourceHandle === sourceHandle);
     return edge ? activeFlow.nodes.find(n => n.id === edge.target) : null;
@@ -56,19 +62,33 @@ const getNextNode = (currentNodeId, sourceHandle = null) => {
 
 // --- ENGINE DE FLUXO ---
 const processFlowStep = async (userPhone, userInput = null, optionId = null) => {
-  if (!activeFlow.isRunning || !activeFlow.config) return;
+  // Verificação Dupla: Bot Ativo E Conectado
+  if (!activeFlow.isRunning) return;
+  if (!isConnected()) {
+    console.log('[Flow] Ignorando mensagem: WhatsApp desconectado.');
+    return;
+  }
 
   const cleanPhone = cleanPhoneNumber(userPhone);
 
-  // Inicializa sessão
   if (!userSessions[cleanPhone]) {
     const startNode = activeFlow.nodes.find(n => n.type === 'start');
     if (!startNode) return;
+    
+    // Verificações de Gatilho
+    if (startNode.data.triggerType === 'keyword_exact' && startNode.data.triggerKeywords) {
+       if (userInput?.toLowerCase() !== startNode.data.triggerKeywords.toLowerCase()) return;
+    }
+    if (startNode.data.triggerType === 'keyword_contains' && startNode.data.triggerKeywords) {
+       if (!userInput?.toLowerCase().includes(startNode.data.triggerKeywords.toLowerCase())) return;
+    }
     
     userSessions[cleanPhone] = {
       currentNodeId: startNode.id,
       variables: { phone: cleanPhone }
     };
+    
+    console.log(`[Flow] Iniciando para ${cleanPhone}`);
     
     const nextNode = getNextNode(startNode.id);
     if (nextNode) {
@@ -91,9 +111,9 @@ const processFlowStep = async (userPhone, userInput = null, optionId = null) => 
     } 
     else if (currentNode.type === 'interactive' && (optionId || userInput)) {
       if (currentNode.data.variable) {
-         session.variables[currentNode.data.variable] = userInput;
+         session.variables[currentNode.data.variable] = userInput; // Ou optionId
       }
-      // Tenta achar edge pelo ID, se falhar, tenta pelo texto (fallback)
+      // Tenta seguir caminho específico do botão ou caminho padrão
       const next = getNextNode(currentNode.id, optionId) || getNextNode(currentNode.id);
       if (next) await executeNode(next, cleanPhone);
     }
@@ -101,23 +121,24 @@ const processFlowStep = async (userPhone, userInput = null, optionId = null) => 
 };
 
 const executeNode = async (node, userPhone) => {
+  // Segurança extra
+  if (!isConnected()) return;
+
   const session = userSessions[userPhone];
   session.currentNodeId = node.id;
-  const config = activeFlow.config;
 
-  await new Promise(r => setTimeout(r, 500));
-  console.log(`[Engine] Executando nó ${node.type} para ${userPhone}`);
+  await new Promise(r => setTimeout(r, 800)); // Delay humano natural
 
   switch (node.type) {
     case 'message':
       const text = replaceVariables(node.data.content, session.variables);
-      await sendTextMessage(userPhone, text, config);
+      await sendTextMessage(userPhone, text);
       const nextMsg = getNextNode(node.id);
       if (nextMsg) await executeNode(nextMsg, userPhone);
       break;
 
     case 'image':
-      await sendImageMessage(userPhone, node.data.content, '', config);
+      await sendImageMessage(userPhone, node.data.content);
       const nextImg = getNextNode(node.id);
       if (nextImg) await executeNode(nextImg, userPhone);
       break;
@@ -127,15 +148,15 @@ const executeNode = async (node, userPhone) => {
       const type = node.data.interactiveType || 'button';
       
       if (type === 'button') {
-        await sendButtonMessage(userPhone, bodyText, node.data.options || [], config);
+        await sendButtonMessage(userPhone, bodyText, node.data.options || []);
       } else {
-        await sendListMessage(userPhone, bodyText, 'Abrir Menu', node.data.options || [], config);
+        await sendListMessage(userPhone, bodyText, 'Abrir Menu', node.data.options || []);
       }
       break;
 
     case 'input':
       const question = replaceVariables(node.data.content, session.variables);
-      await sendTextMessage(userPhone, question, config);
+      await sendTextMessage(userPhone, question);
       break;
 
     case 'set_variable':
@@ -145,6 +166,9 @@ const executeNode = async (node, userPhone) => {
       const nextVar = getNextNode(node.id);
       if (nextVar) await executeNode(nextVar, userPhone);
       break;
+    
+    // TODO: Implementar lógica de API Request e AI Gemini aqui também no backend para produção real
+    // Por enquanto, simplificado para Message flow.
 
     case 'delay':
       const ms = (node.data.duration || 1) * 1000;
@@ -160,127 +184,92 @@ const executeNode = async (node, userPhone) => {
 };
 
 
+// --- HANDLER DE MENSAGENS BAILEYS ---
+setMessageHandler((msg) => {
+  // O bot só processa se estiver ONLINE e RODANDO
+  if (!isConnected()) return;
+  if (!activeFlow.isRunning) return;
+
+  const remoteJid = msg.key.remoteJid;
+  const userText = msg.message?.conversation || 
+                   msg.message?.extendedTextMessage?.text || 
+                   msg.message?.buttonsResponseMessage?.selectedDisplayText ||
+                   msg.message?.listResponseMessage?.title;
+  
+  const selectedButtonId = msg.message?.buttonsResponseMessage?.selectedButtonId || 
+                           msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId;
+
+  if (userText) {
+    console.log(`📩 Mensagem recebida de ${remoteJid}: ${userText}`);
+    processFlowStep(remoteJid, userText, selectedButtonId);
+  }
+});
+
+
 // --- API ROUTES ---
 const apiRouter = express.Router();
 
+// Rotas para o Frontend controlar a conexão
+apiRouter.get('/whatsapp/status', (req, res) => {
+  const data = getStatusData();
+  res.json(data);
+});
+
+apiRouter.post('/whatsapp/connect', (req, res) => {
+  // Baileys já inicia automaticamente no start, mas podemos forçar recarregamento se precisar
+  const data = getStatusData();
+  res.json(data);
+});
+
+apiRouter.post('/whatsapp/logout', async (req, res) => {
+  const result = await logout();
+  res.json(result);
+});
+
+// Controle do Bot
 apiRouter.post('/start', (req, res) => {
-  const { flowData, ...config } = req.body;
-  if (!flowData || !flowData.nodes) {
-    return res.status(400).json({ success: false, message: 'Dados do fluxo inválidos' });
+  const { flowData } = req.body;
+  
+  if (!isConnected()) {
+    return res.json({ success: false, message: 'WhatsApp não está conectado. Vá em Configurações > Conectar.' });
   }
 
-  activeFlow = {
-    isRunning: true,
-    config: config,
-    nodes: flowData.nodes,
-    edges: flowData.edges
-  };
-
-  console.log(`🤖 BOT ATIVADO: ${config.instanceName} (Evolution)`);
-  res.json({ success: true, message: 'Bot Ativado' });
+  activeFlow.nodes = flowData.nodes || [];
+  activeFlow.edges = flowData.edges || [];
+  activeFlow.isRunning = true;
+  console.log('🤖 Bot iniciado com', activeFlow.nodes.length, 'nós');
+  res.json({ success: true });
 });
 
 apiRouter.post('/stop', (req, res) => {
   activeFlow.isRunning = false;
-  console.log('🤖 BOT PARADO');
-  res.json({ success: true, message: 'Bot parado' });
+  console.log('🤖 Bot parado');
+  res.json({ success: true });
 });
 
 apiRouter.post('/send-message', async (req, res) => {
-  const { to, message, config } = req.body;
-  const cleanTo = cleanPhoneNumber(to);
-  
-  console.log(`\n📨 Teste Manual (Evolution) para: ${cleanTo}`);
-
-  if (!config?.evolutionUrl) {
-    return res.status(400).json({ success: false, message: 'Configuração Evolution incompleta.' });
+  if (!isConnected()) {
+    return res.status(400).json({ success: false, error: 'WhatsApp Offline' });
   }
-
-  const result = await sendTextMessage(cleanTo, message, config);
+  const { to, message } = req.body;
+  // Teste manual
+  const result = await sendTextMessage(to, message);
   res.json(result);
 });
 
-// --- WEBHOOK EVOLUTION API ---
-// O endpoint que você deve configurar na Evolution é: http://seu-ip:3000/api/webhook
-apiRouter.post('/webhook', async (req, res) => {
-  // A Evolution espera um 200 OK rápido
-  res.status(200).json({ status: 'success' });
-
-  try {
-    const body = req.body;
-    
-    // Log para debug
-    // console.log('📩 Webhook recebido:', JSON.stringify(body, null, 2));
-
-    // Verifica formato padrão Evolution v2 (Event Type: MESSAGES_UPSERT)
-    if (body.event === 'messages.upsert') {
-       const msgData = body.data;
-       
-       // Ignora mensagens enviadas por mim mesmo (fromMe: true)
-       if (msgData.key.fromMe) return;
-
-       const remoteJid = msgData.key.remoteJid; // 5511999...@s.whatsapp.net
-       const from = cleanPhoneNumber(remoteJid);
-       const messageContent = msgData.message;
-
-       if (!messageContent) return;
-
-       console.log(`📩 Webhook Evolution: Mensagem de ${from}`);
-
-       let userInput = null;
-       let optionId = null;
-
-       // Extração de texto (Vários formatos possíveis no Baileys)
-       if (messageContent.conversation) {
-         userInput = messageContent.conversation;
-       } 
-       else if (messageContent.extendedTextMessage?.text) {
-         userInput = messageContent.extendedTextMessage.text;
-       }
-       else if (messageContent.buttonsResponseMessage) {
-         // Resposta de Botão Antigo
-         userInput = messageContent.buttonsResponseMessage.selectedDisplayText;
-         optionId = messageContent.buttonsResponseMessage.selectedButtonId;
-       }
-       else if (messageContent.listResponseMessage) {
-         // Resposta de Lista
-         userInput = messageContent.listResponseMessage.title;
-         optionId = messageContent.listResponseMessage.singleSelectReply.selectedRowId;
-       }
-       // Resposta de botão template (novo)
-       else if (messageContent.templateButtonReplyMessage) {
-          userInput = messageContent.templateButtonReplyMessage.selectedDisplayText;
-          optionId = messageContent.templateButtonReplyMessage.selectedId;
-       }
-
-       if (userInput && activeFlow.isRunning) {
-         console.log(`   Conteúdo: "${userInput}"`);
-         await processFlowStep(from, userInput, optionId);
-       }
-    }
-  } catch (error) {
-    console.error('Erro ao processar webhook:', error);
-  }
-});
-
-// Mount API Router
 app.use('/api', apiRouter);
 
-// --- FRONTEND ROUTES ---
+// --- STATIC FRONTEND ---
 const distPath = path.join(__dirname, '../dist');
-if (!fs.existsSync(distPath)) {
-  console.error("❌ ERRO: A pasta 'dist' não foi encontrada.");
+if (fs.existsSync(distPath)) {
+  app.use('/painel', express.static(distPath));
+  app.get('/painel/*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+  app.get('/', (req, res) => res.redirect('/painel'));
+} else {
+  console.log("⚠️ Pasta 'dist' não encontrada. O frontend não será servido.");
 }
-app.use('/painel', express.static(distPath));
-app.get('/painel/*', (req, res) => {
-  if (fs.existsSync(path.join(distPath, 'index.html'))) {
-    res.sendFile(path.join(distPath, 'index.html'));
-  } else {
-    res.status(404).send("Frontend não encontrado.");
-  }
-});
-app.get('/', (req, res) => res.redirect('/painel'));
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Flow (Evolution Edition) rodando em: http://localhost:${PORT}/painel`);
+  console.log(`\n🚀 Servidor Rodando!`);
+  console.log(`👉 Acesso: http://localhost:${PORT}/painel`);
 });
