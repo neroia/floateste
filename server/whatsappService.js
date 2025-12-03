@@ -63,12 +63,12 @@ export async function startWhatsApp() {
         let textBody = message.body;
         let selectedId = null;
 
-        // Tratamento para Listas (Único formato interativo suportado agora)
+        // Tratamento para Listas
         if (message.type === 'list_response') {
             selectedId = message.selectedRowId;
             textBody = message.listResponse?.title || message.body;
         }
-        // Fallback para botões antigos caso ainda existam no whatsapp do cliente
+        // Fallback para botões antigos
         else if (message.type === 'buttons_response') {
             selectedId = message.selectedButtonId || message.selectedBtnId;
         } 
@@ -135,13 +135,19 @@ export async function sendTextMessage(to, text) {
   }
 }
 
-export async function sendImageMessage(to, imageUrl, caption = '') {
+export async function sendImageMessage(to, content, caption = '') {
   if (!client) return { success: false };
   const id = to.includes('@') ? to : `${to}@c.us`;
   
   try {
-    // WPPConnect accepts URL or Base64 Data URI directly in the second parameter
-    await client.sendImage(id, imageUrl, 'imagem', caption);
+    // Verifica se é Data URI (Base64 do PC) ou URL
+    if (content && content.startsWith('data:')) {
+        // WPPConnect sendFile lida com Data URI se passado corretamente como 'content'
+        await client.sendFile(id, content, 'imagem.jpg', caption);
+    } else {
+        await client.sendFile(id, content, 'imagem.jpg', caption);
+    }
+    console.log(`[WPP] Imagem enviada para ${to}`);
     return { success: true };
   } catch (error) {
     console.error('Erro WPP Image:', error);
@@ -149,14 +155,15 @@ export async function sendImageMessage(to, imageUrl, caption = '') {
   }
 }
 
-export async function sendAudioMessage(to, audioUrl) {
+export async function sendAudioMessage(to, content) {
   if (!client) return { success: false };
   const id = to.includes('@') ? to : `${to}@c.us`;
   
   try {
-    // For WPPConnect, we can use sendPtt (for audio notes) or sendVoice
-    // Accepts Base64 or URL
-    await client.sendPtt(id, audioUrl);
+    // sendPtt envia como nota de voz (microfone)
+    // Suporta URL ou Base64 Data URI
+    await client.sendPtt(id, content);
+    console.log(`[WPP] Áudio enviado para ${to}`);
     return { success: true };
   } catch (error) {
     console.error('Erro WPP Audio:', error);
@@ -171,11 +178,11 @@ export async function sendListMessage(to, text, buttonText, sections) {
     // Formato Nativo RIGOROSO para Lista (Menu)
     const listData = [
         {
-            title: 'Opções', // Título da seção (Obrigatório)
+            title: 'Opções', 
             rows: sections.map(s => ({
                 rowId: s.id,
                 title: s.label,
-                description: s.description || '' // Descrição opcional da linha
+                description: s.description || '' 
             }))
         }
     ];
@@ -184,15 +191,15 @@ export async function sendListMessage(to, text, buttonText, sections) {
         await client.sendListMessage(id, {
             buttonText: buttonText || 'Abrir Menu',
             description: text,
-            title: 'Menu de Opções', // Título da mensagem
-            footer: 'Selecione uma opção', // Rodapé
+            title: 'Menu', 
+            footer: 'Selecione uma opção', 
             sections: listData
         });
         return { success: true };
     } catch (e) {
         console.error("Erro crítico ao enviar lista nativa:", e);
         
-        // Fallback Texto Formatado se a lista nativa falhar
+        // Fallback Texto Formatado
         const fallbackText = `*${text}*\n\n${sections.map((s, i) => `*${i + 1}.* ${s.label}`).join('\n')}\n\n_Digite o número da opção._`;
         await client.sendText(id, fallbackText);
         return { success: true };
