@@ -1,197 +1,200 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
-import pino from 'pino';
-import QRCode from 'qrcode';
-import fs from 'fs';
-import path from 'path';
+const wppconnect = require('@wppconnect-team/wppconnect');
 
-// Estado global da conexão
-let sock = null;
-let qrCodeUrl = null;
-let connectionStatus = 'close'; // 'open', 'connecting', 'close'
-let messageHandler = null; // Função de callback para quando chegar mensagem
+// Estado global
+let client = null;
+let qrCodeData = null;
+let status = 'close'; // 'open', 'connecting', 'close'
+let messageHandler = null;
 
-// Helper para verificar status externamente
+// Helper para verificar status
 export function isConnected() {
-  return connectionStatus === 'open';
+  return status === 'open' && client !== null;
 }
 
-// Função para iniciar o WhatsApp
+// Iniciar WPPConnect
 export async function startWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: true, // Mostra no terminal também para debug
-    logger: pino({ level: 'silent' }), // Logs limpos
-    browser: ["Flow Builder", "Chrome", "1.0.0"],
-    connectTimeoutMs: 60000,
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      // Converte o código QR puro em uma URL de imagem (Data URI) para o frontend
-      qrCodeUrl = await QRCode.toDataURL(qr);
-      connectionStatus = 'connecting';
-    }
-
-    if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      connectionStatus = 'close';
-      qrCodeUrl = null;
-      
-      console.log(`Conexão fechada. Reconectar? ${shouldReconnect}`);
-      
-      if (shouldReconnect) {
-        // Delay de 5 segundos para evitar loop infinito rápido
-        setTimeout(() => {
-          startWhatsApp(); 
-        }, 5000);
-      } else {
-        console.log('Desconectado. Delete a pasta auth_info_baileys para gerar novo QR.');
-        // Opcional: limpar pasta automaticamente
-        // fs.rmSync('auth_info_baileys', { recursive: true, force: true });
-      }
-    } else if (connection === 'open') {
-      console.log('✅ WhatsApp Conectado!');
-      connectionStatus = 'open';
-      qrCodeUrl = null;
-    }
-  });
-
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type === 'notify') {
-      for (const msg of messages) {
-        if (!msg.key.fromMe && messageHandler) {
-           messageHandler(msg);
+  status = 'connecting';
+  
+  try {
+    wppconnect.create({
+      session: 'flow_session',
+      catchQR: (base64Qr, asciiQR) => {
+        console.log('📷 QR Code gerado pelo WPPConnect');
+        qrCodeData = base64Qr; 
+        status = 'connecting';
+      },
+      statusFind: (statusSession, session) => {
+        console.log(`📡 Status Sessão: ${statusSession}`);
+        
+        if (statusSession === 'isLogged' || statusSession === 'inChat') {
+          status = 'open';
+          qrCodeData = null;
         }
-      }
-    }
-  });
+        
+        if (statusSession === 'browserClose' || statusSession === 'qrReadFail' || statusSession === 'autocloseCalled') {
+          status = 'close';
+          client = null;
+        }
+      },
+      headless: true, 
+      devtools: false,
+      useChrome: true,
+      debug: false,
+      logQR: false,
+      browserArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
+      autoClose: 0, 
+      disableWelcome: true,
+      updatesLog: false,
+    })
+    .then((wppClient) => {
+      client = wppClient;
+      status = 'open';
+      console.log('✅ WPPConnect Iniciado e Conectado!');
+
+      // Listener de Mensagens
+      client.onMessage((message) => {
+        if (!messageHandler || message.isGroupMsg) return;
+
+        // Extrair dados úteis da mensagem
+        const remoteJid = message.from;
+        let textBody = message.body;
+        let selectedId = null;
+
+        // Tratamento para Listas (Único formato interativo suportado agora)
+        if (message.type === 'list_response') {
+            selectedId = message.selectedRowId;
+            textBody = message.listResponse?.title || message.body;
+        }
+        // Fallback para botões antigos caso ainda existam no whatsapp do cliente
+        else if (message.type === 'buttons_response') {
+            selectedId = message.selectedButtonId || message.selectedBtnId;
+        } 
+
+        const normalizedMsg = {
+            key: { remoteJid: remoteJid, fromMe: message.fromMe },
+            message: { conversation: textBody },
+            selectedId: selectedId
+        };
+        
+        messageHandler(normalizedMsg);
+      });
+    })
+    .catch((error) => {
+      console.log("Erro ao iniciar WPPConnect:", error);
+      status = 'close';
+      // Tentar reconectar após delay se falhar no inicio
+      setTimeout(startWhatsApp, 10000);
+    });
+
+  } catch (e) {
+    console.error("Erro fatal WPP:", e);
+  }
 }
 
-// Configura quem vai processar as mensagens (o index.js)
 export function setMessageHandler(handler) {
   messageHandler = handler;
 }
 
-// Retorna status e QR para o frontend
 export function getStatusData() {
   return {
-    status: connectionStatus,
-    qrCode: qrCodeUrl
+    status: status,
+    qrCode: qrCodeData
   };
 }
 
-// Forçar desconexão
 export async function logout() {
   try {
-    if (sock) {
-      await sock.logout();
-      sock = null;
-      connectionStatus = 'close';
-      qrCodeUrl = null;
-      // Opcional: Apagar a pasta auth_info_baileys para limpar sessão
-      try {
-        fs.rmSync('auth_info_baileys', { recursive: true, force: true });
-      } catch (err) {
-        console.error("Erro ao limpar pasta auth", err);
-      }
+    if (client) {
+      await client.logout();
+      client = null;
     }
+    status = 'close';
+    qrCodeData = null;
+    setTimeout(startWhatsApp, 3000);
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
   }
 }
 
-// --- FUNÇÕES DE ENVIO ---
+// --- ENVIO DE MENSAGENS ---
 
 export async function sendTextMessage(to, text) {
-  if (!sock) return { success: false, error: 'WhatsApp desconectado' };
-  
-  // Baileys usa formato JID (ex: 551199999999@s.whatsapp.net)
-  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+  if (!client) return { success: false, error: 'WhatsApp desconectado' };
+  const id = to.includes('@') ? to : `${to}@c.us`;
 
   try {
-    await sock.sendMessage(id, { text: text });
+    await client.sendText(id, text);
     return { success: true };
   } catch (error) {
-    console.error('Erro envio texto:', error);
+    console.error('Erro WPP Text:', error);
     return { success: false, error: error.message };
   }
 }
 
 export async function sendImageMessage(to, imageUrl, caption = '') {
-  if (!sock) return { success: false };
-  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+  if (!client) return { success: false };
+  const id = to.includes('@') ? to : `${to}@c.us`;
   
   try {
-    await sock.sendMessage(id, { 
-      image: { url: imageUrl }, 
-      caption: caption 
-    });
+    // WPPConnect accepts URL or Base64 Data URI directly in the second parameter
+    await client.sendImage(id, imageUrl, 'imagem', caption);
     return { success: true };
   } catch (error) {
+    console.error('Erro WPP Image:', error);
     return { success: false };
   }
 }
 
-export async function sendButtonMessage(to, text, buttons) {
-  if (!sock) return { success: false };
-  const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+export async function sendAudioMessage(to, audioUrl) {
+  if (!client) return { success: false };
+  const id = to.includes('@') ? to : `${to}@c.us`;
   
-  const buttonsPayload = buttons.map((b, idx) => ({
-    buttonId: b.id || `id-${idx}`, 
-    buttonText: { displayText: b.label }, 
-    type: 1 
-  }));
-
   try {
-    await sock.sendMessage(id, {
-      text: text,
-      footer: 'Flow Bot',
-      buttons: buttonsPayload,
-      headerType: 1
-    });
+    // For WPPConnect, we can use sendPtt (for audio notes) or sendVoice
+    // Accepts Base64 or URL
+    await client.sendPtt(id, audioUrl);
     return { success: true };
   } catch (error) {
-    console.error("Erro botões:", error);
-    // Fallback para texto
-    const fallbackText = `${text}\n\n${buttons.map(b => `[ ${b.label} ]`).join('\n')}`;
-    await sock.sendMessage(id, { text: fallbackText });
-    return { success: true };
+    console.error('Erro WPP Audio:', error);
+    return { success: false };
   }
 }
 
 export async function sendListMessage(to, text, buttonText, sections) {
-    if (!sock) return { success: false };
-    const id = to.includes('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+    if (!client) return { success: false };
+    const id = to.includes('@') ? to : `${to}@c.us`;
 
-    const sectionsPayload = [{
-      title: "Opções",
-      rows: sections.map((s, idx) => ({
-        title: s.label,
-        rowId: s.id || `id-${idx}`,
-        description: s.description || ""
-      }))
-    }];
+    // Formato Nativo RIGOROSO para Lista (Menu)
+    const listData = [
+        {
+            title: 'Opções', // Título da seção (Obrigatório)
+            rows: sections.map(s => ({
+                rowId: s.id,
+                title: s.label,
+                description: s.description || '' // Descrição opcional da linha
+            }))
+        }
+    ];
 
     try {
-      await sock.sendMessage(id, {
-        text: text,
-        buttonText: buttonText || "Ver Opções",
-        sections: sectionsPayload
-      });
-      return { success: true };
+        await client.sendListMessage(id, {
+            buttonText: buttonText || 'Abrir Menu',
+            description: text,
+            title: 'Menu de Opções', // Título da mensagem
+            footer: 'Selecione uma opção', // Rodapé
+            sections: listData
+        });
+        return { success: true };
     } catch (e) {
-      const fallbackText = `${text}\n\n${sections.map(s => `* ${s.label}`).join('\n')}`;
-      await sock.sendMessage(id, { text: fallbackText });
-      return { success: true };
+        console.error("Erro crítico ao enviar lista nativa:", e);
+        
+        // Fallback Texto Formatado se a lista nativa falhar
+        const fallbackText = `*${text}*\n\n${sections.map((s, i) => `*${i + 1}.* ${s.label}`).join('\n')}\n\n_Digite o número da opção._`;
+        await client.sendText(id, fallbackText);
+        return { success: true };
     }
 }

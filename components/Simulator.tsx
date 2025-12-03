@@ -273,10 +273,11 @@ const Simulator: React.FC<SimulatorProps> = ({ nodes, edges, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] animate-in fade-in duration-200">
-      <div className="bg-white rounded-[32px] w-[380px] h-[700px] shadow-2xl flex flex-col overflow-hidden relative border-8 border-gray-900">
+      {/* Resized Container */}
+      <div className="bg-white rounded-[32px] w-[340px] h-[85vh] max-h-[650px] shadow-2xl flex flex-col overflow-hidden relative border-8 border-gray-900">
         
         {/* Notch/Header */}
-        <div className="bg-gray-100 p-4 border-b border-gray-200 flex justify-between items-center pt-6">
+        <div className="bg-gray-100 p-3 border-b border-gray-200 flex justify-between items-center pt-5">
            <div className="flex items-center gap-2">
              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
                 <Bot size={18} />
@@ -287,11 +288,11 @@ const Simulator: React.FC<SimulatorProps> = ({ nodes, edges, onClose }) => {
              </div>
            </div>
            <div className="flex gap-2">
-             <button onClick={startFlow} className="p-2 hover:bg-gray-200 rounded-full text-gray-600">
-               <RefreshCw size={18} />
+             <button onClick={startFlow} className="p-1.5 hover:bg-gray-200 rounded-full text-gray-600">
+               <RefreshCw size={16} />
              </button>
-             <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full text-gray-600">
-               <X size={18} />
+             <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-full text-gray-600">
+               <X size={16} />
              </button>
            </div>
         </div>
@@ -299,7 +300,7 @@ const Simulator: React.FC<SimulatorProps> = ({ nodes, edges, onClose }) => {
         {/* Chat Area */}
         <div 
           ref={scrollRef}
-          className="flex-1 bg-[#e5ddd5] p-4 overflow-y-auto flex flex-col gap-3"
+          className="flex-1 bg-[#e5ddd5] p-3 overflow-y-auto flex flex-col gap-3"
           style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat' }}
         >
           {messages.map((msg, idx) => (

@@ -52,7 +52,7 @@ const CustomNode = ({ data, type, selected }: NodeProps<NodeData>) => {
       return `${data.apiMethod || 'GET'} ${data.apiUrl || ''}`;
     }
     if (isInteractive) {
-      return data.interactiveType === 'list' ? 'Menu Lista' : 'Botões';
+      return 'Menu (Lista)';
     }
     if (type === NodeType.SET_VARIABLE) {
       return `${data.variable || '?'} = ${data.value || '?'}`;

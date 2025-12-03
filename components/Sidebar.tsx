@@ -14,10 +14,15 @@ import {
   Mic,
   Variable,
   Code,
-  Headset
+  Headset,
+  HelpCircle
 } from 'lucide-react';
 
-const Sidebar = () => {
+interface SidebarProps {
+  onHelpClick: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onHelpClick }) => {
   const onDragStart = (event: React.DragEvent, nodeType: NodeType) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.effectAllowed = 'move';
@@ -25,7 +30,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { type: NodeType.MESSAGE, label: 'Mensagem', icon: <MessageSquare size={18} />, color: 'text-blue-500 bg-blue-50' },
-    { type: NodeType.INTERACTIVE, label: 'Botões/Lista', icon: <List size={18} />, color: 'text-violet-500 bg-violet-50' },
+    { type: NodeType.INTERACTIVE, label: 'Menu (Lista)', icon: <List size={18} />, color: 'text-violet-500 bg-violet-50' },
     { type: NodeType.IMAGE, label: 'Imagem', icon: <ImageIcon size={18} />, color: 'text-purple-500 bg-purple-50' },
     { type: NodeType.AUDIO, label: 'Áudio', icon: <Mic size={18} />, color: 'text-pink-600 bg-pink-50' },
     { type: NodeType.INPUT, label: 'Entrada Usuario', icon: <FileInput size={18} />, color: 'text-pink-500 bg-pink-50' },
@@ -68,10 +73,17 @@ const Sidebar = () => {
         </div>
       </div>
       
-      <div className="p-4 border-t border-gray-100 bg-gray-50/50">
-        <div className="text-[10px] text-gray-400 text-center">
-          Powered by Gemini 2.5 Flash
+      <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+        <div className="text-[10px] text-gray-400">
+          Powered by Gemini 2.5
         </div>
+        <button 
+          onClick={onHelpClick}
+          className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+          title="Ajuda"
+        >
+          <HelpCircle size={16} />
+        </button>
       </div>
     </aside>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FlowNode, NodeType, NodeOption } from '../types';
-import { X, Sparkles, Save, Trash2, Globe, Zap, Plus, GripVertical } from 'lucide-react';
+import { X, Sparkles, Save, Trash2, Globe, Zap, Plus, GripVertical, Upload } from 'lucide-react';
 import { suggestMessageContent } from '../services/geminiService';
 
 interface PropertiesPanelProps {
@@ -36,6 +36,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
       handleChange('content', suggestion);
     }
     setIsGenerating(false);
+  };
+
+  // File Upload Handler (Converts to Base64)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size (limit to ~5MB for Base64 safety in local storage)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Arquivo muito grande. Limite de 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleChange('content', reader.result); // Saves as Base64 string
+    };
+    reader.readAsDataURL(file);
   };
 
   // Interactive Options Handlers
@@ -141,20 +159,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
         {/* Interactive Specifics */}
         {node.type === NodeType.INTERACTIVE && (
           <div className="space-y-4">
-             <div className="space-y-1.5">
-               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Tipo de Interação</label>
-               <select 
-                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                 value={localData.interactiveType || 'button'}
-                 onChange={(e) => handleChange('interactiveType', e.target.value)}
-               >
-                 <option value="button">Botões (Max 3)</option>
-                 <option value="list">Lista de Opções (Max 10)</option>
-               </select>
-             </div>
-
              <div className="space-y-2">
-               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Opções</label>
+               <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Opções do Menu</label>
                <div className="space-y-2">
                  {(localData.options || []).map((opt: NodeOption, idx: number) => (
                    <div key={opt.id} className="flex items-center gap-2">
@@ -196,9 +202,21 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
           </div>
         )}
 
+        {/* IMAGE UPLOAD */}
         {node.type === NodeType.IMAGE && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">URL da Imagem</label>
+          <div className="space-y-3">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Imagem</label>
+            
+            <div className="flex items-center gap-2">
+              <label className="flex-1 flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <Upload size={16} className="text-gray-500 mr-2" />
+                <span className="text-sm text-gray-600">Carregar do PC</span>
+                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+              </label>
+            </div>
+            
+            <p className="text-[10px] text-gray-400 text-center">Ou cole a URL abaixo:</p>
+
             <input
               type="text"
               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm"
@@ -206,12 +224,30 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
               onChange={(e) => handleChange('content', e.target.value)}
               placeholder="https://exemplo.com/imagem.jpg"
             />
+            
+            {localData.content && (
+              <div className="mt-2 rounded-lg overflow-hidden border border-gray-200 h-32 w-full bg-gray-50 flex items-center justify-center">
+                <img src={localData.content} alt="Preview" className="h-full object-contain" />
+              </div>
+            )}
           </div>
         )}
 
+        {/* AUDIO UPLOAD */}
         {node.type === NodeType.AUDIO && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">URL do Áudio (MP3/OGG)</label>
+          <div className="space-y-3">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Áudio</label>
+            
+            <div className="flex items-center gap-2">
+              <label className="flex-1 flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <Upload size={16} className="text-gray-500 mr-2" />
+                <span className="text-sm text-gray-600">Carregar MP3/OGG</span>
+                <input type="file" className="hidden" accept="audio/*" onChange={handleFileUpload} />
+              </label>
+            </div>
+
+            <p className="text-[10px] text-gray-400 text-center">Ou cole a URL abaixo:</p>
+
             <input
               type="text"
               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm"
@@ -219,6 +255,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ node, onChange, onClo
               onChange={(e) => handleChange('content', e.target.value)}
               placeholder="https://exemplo.com/audio.mp3"
             />
+
+            {localData.content && (
+              <audio controls src={localData.content} className="w-full mt-2" />
+            )}
           </div>
         )}
 

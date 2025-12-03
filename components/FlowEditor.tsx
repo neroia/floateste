@@ -14,8 +14,9 @@ import CustomNode from './CustomNode';
 import PropertiesPanel from './PropertiesPanel';
 import Simulator from './Simulator';
 import SettingsModal from './SettingsModal';
+import HelpModal from './HelpModal';
 import { FlowNode, NodeType, NodeData } from '../types';
-import { Play, Download, Upload, Smartphone, Settings, Square, Loader2, Send } from 'lucide-react';
+import { Play, Download, Upload, Smartphone, Settings, Square, Loader2 } from 'lucide-react';
 
 const nodeTypes = {
   [NodeType.START]: CustomNode,
@@ -55,14 +56,10 @@ const FlowEditor = () => {
   // States related to UI/Features
   const [isSimulatorOpen, setSimulatorOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const [isHelpOpen, setHelpOpen] = useState(false);
   const [isBotRunning, setIsBotRunning] = useState(false);
   const [isLoadingBot, setIsLoadingBot] = useState(false);
   const [botConfig, setBotConfig] = useState<any>(null);
-  
-  // Manual Trigger State
-  const [isTestModalOpen, setTestModalOpen] = useState(false);
-  const [testPhoneNumber, setTestPhoneNumber] = useState('');
-  const [isSendingTest, setIsSendingTest] = useState(false);
   
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
@@ -179,49 +176,6 @@ const FlowEditor = () => {
     localStorage.setItem('flow_bot_config', JSON.stringify(newConfig));
   };
 
-  const handleManualTrigger = async () => {
-     if (!testPhoneNumber) {
-       alert("Digite um número de telefone (Ex: 551199999999)");
-       return;
-     }
-
-     // Find the first message node connected to Start
-     const startEdge = edges.find(e => e.source === 'start-1');
-     if (!startEdge) {
-       alert("Conecte o bloco 'Início' a uma 'Mensagem' para testar.");
-       return;
-     }
-     const firstNode = nodes.find(n => n.id === startEdge.target);
-     if (!firstNode) return;
-
-     const messageContent = firstNode.data.content || "Olá! Teste do Flow.";
-
-     setIsSendingTest(true);
-     try {
-       const res = await fetch('/api/send-message', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({
-           to: testPhoneNumber,
-           message: messageContent,
-           config: botConfig
-         })
-       });
-       
-       const data = await res.json();
-       if (data.success) {
-         alert(`✅ Mensagem enviada com sucesso!`);
-         setTestModalOpen(false);
-       } else {
-         alert(`❌ Erro ao enviar: ${data.error || 'Verifique se o WhatsApp está conectado.'}`);
-       }
-     } catch (e) {
-       alert("Erro de conexão com o servidor.");
-     } finally {
-       setIsSendingTest(false);
-     }
-  };
-
   const toggleBot = async () => {
     setIsLoadingBot(true);
     const baseUrl = '/api';
@@ -274,7 +228,7 @@ const FlowEditor = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#f5f5f7]">
-      <Sidebar />
+      <Sidebar onHelpClick={() => setHelpOpen(true)} />
       
       <div className="flex-1 flex flex-col h-full relative" ref={reactFlowWrapper}>
         
@@ -320,14 +274,6 @@ const FlowEditor = () => {
                 </button>
              </div>
              
-             <button 
-                onClick={() => setTestModalOpen(true)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-blue-500"
-             >
-                <Send size={16} />
-                <span className="hidden md:inline">Disparo Manual</span>
-             </button>
-
              <button 
                 onClick={() => setSimulatorOpen(true)}
                 className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-gray-700"
@@ -389,46 +335,8 @@ const FlowEditor = () => {
           onClose={() => setSimulatorOpen(false)} 
         />
       )}
-
-      {/* Manual Trigger Modal */}
-      {isTestModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center animate-in fade-in">
-           <div className="bg-white rounded-2xl p-6 w-[400px] shadow-2xl">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Teste de Disparo Real</h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Isso enviará a primeira mensagem do fluxo para o número abaixo usando a conexão atual do WhatsApp.
-              </p>
-              
-              <div className="space-y-2 mb-6">
-                <label className="text-xs font-bold text-gray-500 uppercase">Número do Destinatário</label>
-                <input 
-                  type="text" 
-                  value={testPhoneNumber}
-                  onChange={(e) => setTestPhoneNumber(e.target.value)}
-                  placeholder="5511999999999"
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex gap-3 justify-end">
-                <button 
-                  onClick={() => setTestModalOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleManualTrigger}
-                  disabled={isSendingTest}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-70 flex items-center gap-2"
-                >
-                  {isSendingTest && <Loader2 size={16} className="animate-spin" />}
-                  Enviar Teste
-                </button>
-              </div>
-           </div>
-        </div>
-      )}
+      
+      <HelpModal isOpen={isHelpOpen} onClose={() => setHelpOpen(false)} />
 
       <SettingsModal 
         isOpen={isSettingsOpen}
