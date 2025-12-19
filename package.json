@@ -1,14 +1,46 @@
 {
-  "name": "flow-whatsapp-builder",
+  "name": "whaleflow-whatsapp-builder",
+  "productName": "WhaleFlow",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Visual WhatsApp Automation Builder powered by Gemini",
+  "main": "electron/main.js",
   "type": "module",
+  "author": "WhaleFlow",
   "scripts": {
-    "dev": "vite",
+    "start": "npm run build && electron .",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && node server/index.js"
+    "dev": "npm run build && node server/index.js",
+    "fix:deps": "electron-builder install-app-deps",
+    "dist:win": "npm run build && npm run fix:deps && electron-builder --win --x64",
+    "dist:linux": "npm run build && npm run fix:deps && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.whaleflow.app",
+    "productName": "WhaleFlow",
+    "asar": false,
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "package.json",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/logo.png",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office",
+      "artifactName": "${productName}-${version}-x86_64.${ext}",
+      "icon": "public/logo.png"
+    }
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
@@ -22,12 +54,16 @@
     "qrcode": "^1.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "reactflow": "^11.10.4"
+    "reactflow": "^11.10.4",
+    "sharp": "^0.33.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^9.2.1",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
     "typescript": "^5.2.2",
     "vite": "^5.1.5"
   }

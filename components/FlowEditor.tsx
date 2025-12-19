@@ -15,8 +15,9 @@ import PropertiesPanel from './PropertiesPanel';
 import Simulator from './Simulator';
 import SettingsModal from './SettingsModal';
 import HelpModal from './HelpModal';
+import Dashboard from './Dashboard';
 import { FlowNode, NodeType, NodeData } from '../types';
-import { Play, Download, Upload, Smartphone, Settings, Square, Loader2 } from 'lucide-react';
+import { Play, Download, Upload, Smartphone, Settings, Square, Loader2, Activity } from 'lucide-react';
 
 const nodeTypes = {
   [NodeType.START]: CustomNode,
@@ -34,6 +35,7 @@ const nodeTypes = {
   [NodeType.AGENT_HANDOFF]: CustomNode,
   [NodeType.DELAY]: CustomNode,
   [NodeType.WEBHOOK]: CustomNode,
+  [NodeType.JUMP]: CustomNode,
 };
 
 const initialNodes: FlowNode[] = [
@@ -54,6 +56,7 @@ const FlowEditor = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   
   // States related to UI/Features
+  const [viewMode, setViewMode] = useState<'editor' | 'dashboard'>('editor');
   const [isSimulatorOpen, setSimulatorOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isHelpOpen, setHelpOpen] = useState(false);
@@ -206,6 +209,8 @@ const FlowEditor = () => {
         
         if (data.success) {
           setIsBotRunning(true);
+          // Opcional: Mudar para dashboard automaticamente ao iniciar
+          // setViewMode('dashboard');
         } else {
           alert("Falha ao iniciar bot: " + data.message);
         }
@@ -224,6 +229,22 @@ const FlowEditor = () => {
     }
   };
 
+  const handleStopFromDashboard = async () => {
+    await toggleBot();
+  };
+
+  // --- RENDER DASHBOARD MODE ---
+  if (viewMode === 'dashboard') {
+    return (
+      <Dashboard 
+        onBack={() => setViewMode('editor')} 
+        onStop={handleStopFromDashboard}
+        isRunning={isBotRunning}
+      />
+    );
+  }
+
+  // --- RENDER EDITOR MODE ---
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
 
   return (
@@ -251,7 +272,7 @@ const FlowEditor = () => {
                   className="p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow"
                   title="Importar JSON"
                 >
-                  <Upload size={18} />
+                  <Download size={18} /> 
                 </button>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
                 
@@ -260,7 +281,7 @@ const FlowEditor = () => {
                   className="p-2 text-gray-600 hover:bg-white hover:text-blue-600 rounded-lg transition-all shadow-sm hover:shadow"
                   title="Exportar JSON"
                 >
-                  <Download size={18} />
+                  <Upload size={18} /> 
                 </button>
 
                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
@@ -274,6 +295,16 @@ const FlowEditor = () => {
                 </button>
              </div>
              
+             {isBotRunning && (
+               <button 
+                  onClick={() => setViewMode('dashboard')}
+                  className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-100 transition-all border border-blue-200 animate-in fade-in"
+               >
+                  <Activity size={16} />
+                  <span className="hidden md:inline">Monitor</span>
+               </button>
+             )}
+
              <button 
                 onClick={() => setSimulatorOpen(true)}
                 className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-700 transition-all active:scale-95 shadow-md hover:shadow-lg border border-gray-700"
@@ -322,6 +353,7 @@ const FlowEditor = () => {
       {selectedNode && (
         <PropertiesPanel 
           node={selectedNode} 
+          nodes={nodes}
           onChange={updateNodeData} 
           onClose={() => setSelectedNodeId(null)} 
           onDelete={deleteNode}

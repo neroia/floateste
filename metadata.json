@@ -1,5 +1,5 @@
 {
-  "name": "Flow - WhatsApp Builder",
+  "name": "WhaleFlow - WhatsApp Builder",
   "description": "Um construtor de automação visual para WhatsApp moderno, estilo Apple, com integração Gemini 2.5 Flash.",
   "requestFramePermissions": [
     "microphone",

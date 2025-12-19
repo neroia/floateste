@@ -17,7 +17,8 @@ import {
   Code,
   Headset,
   Check,
-  X as XIcon
+  X as XIcon,
+  CornerUpLeft
 } from 'lucide-react';
 import { NodeData, NodeType } from '../types';
 
@@ -38,6 +39,7 @@ const getNodeIcon = (type: string) => {
     case NodeType.WEBHOOK: return <Webhook size={16} className="text-indigo-500" />;
     case NodeType.API_REQUEST: return <Globe size={16} className="text-cyan-500" />;
     case NodeType.AGENT_HANDOFF: return <Headset size={16} className="text-red-500" />;
+    case NodeType.JUMP: return <CornerUpLeft size={16} className="text-gray-700" />;
     default: return <MessageSquare size={16} />;
   }
 };
@@ -46,6 +48,7 @@ const CustomNode = ({ data, type, selected }: NodeProps<NodeData>) => {
   const isStart = type === NodeType.START;
   const isCondition = type === NodeType.CONDITION;
   const isInteractive = type === NodeType.INTERACTIVE;
+  const isJump = type === NodeType.JUMP;
   
   const getSubtext = () => {
     if (type === NodeType.API_REQUEST) {
@@ -62,6 +65,9 @@ const CustomNode = ({ data, type, selected }: NodeProps<NodeData>) => {
     }
     if (type === NodeType.AGENT_HANDOFF) {
       return "Pausar e chamar humano";
+    }
+    if (isJump) {
+      return data.jumpNodeId ? "Redirecionando..." : "Selecione o destino";
     }
     if (isStart) {
        if (data.triggerType === 'keyword_exact') return `Se for exatamente: "${data.triggerKeywords}"`;
@@ -160,8 +166,8 @@ const CustomNode = ({ data, type, selected }: NodeProps<NodeData>) => {
         />
       )}
 
-      {/* Standard Output Handle (Right) - Only if NOT Condition or Interactive */}
-      {(!isCondition && !isInteractive) && (
+      {/* Standard Output Handle (Right) - Only if NOT Condition or Interactive or Jump */}
+      {(!isCondition && !isInteractive && !isJump) && (
         <Handle
           type="source"
           position={Position.Right}

@@ -1,36 +1,121 @@
 import { createRequire } from 'module';
+import path from 'path';
 const require = createRequire(import.meta.url);
-
-const wppconnect = require('@wppconnect-team/wppconnect');
 
 // Estado global
 let client = null;
 let qrCodeData = null;
-let status = 'close'; // 'open', 'connecting', 'close'
+let status = 'close'; 
+let statusMessage = "Desconectado";
 let messageHandler = null;
+let initAttemptCount = 0;
+let wppconnect = null;
 
-// Helper para verificar status
+// DIAGNÓSTICO PRÉVIO DE DEPENDÊNCIAS
+try {
+  // Teste isolado do Sharp (Frequentemente falha no Windows se não compilado corretamente)
+  require('sharp');
+} catch (e) {
+  console.error("[FATAL] Erro ao carregar Sharp:", e.message);
+  status = 'error_dependency';
+  statusMessage = "Erro de DLL/Sharp. Instale o 'Visual C++ Redistributable' ou recompile.";
+}
+
+// Se o Sharp passou (ou se tentamos continuar mesmo assim), carregamos o WPPConnect
+if (status !== 'error_dependency') {
+  try {
+    wppconnect = require('@wppconnect-team/wppconnect');
+  } catch (e) {
+    console.error("[FATAL ERROR] Falha ao carregar @wppconnect-team/wppconnect");
+    console.error(e);
+    status = 'error_dependency';
+    statusMessage = `Erro Modulo Nativo (WPP): ${e.message}`; 
+  }
+}
+
+// CONFIGURAÇÃO DE CAMINHO SEGURO
+const APPDATA_PATH = process.env.APPDATA_PATH;
+
+const SESSION_PATH = APPDATA_PATH ? path.join(APPDATA_PATH, 'flow_session') : 'flow_session';
+const CHROME_DATA_PATH = APPDATA_PATH ? path.join(APPDATA_PATH, 'wpp_chrome_data') : 'wpp_chrome_data';
+
 export function isConnected() {
   return status === 'open' && client !== null;
 }
 
-// Iniciar WPPConnect
+export async function restartWhatsApp() {
+    console.log("[WPP] Solicitado reinício forçado...");
+    statusMessage = "Reiniciando serviço...";
+    if (client) {
+        try { await client.close(); } catch(e) {}
+        client = null;
+    }
+    status = 'close';
+    qrCodeData = null;
+    setTimeout(startWhatsApp, 2000);
+    return { success: true };
+}
+
 export async function startWhatsApp() {
-  status = 'connecting';
+  // Bloqueio se já identificamos erro de dependência no boot
+  if (status === 'error_dependency') {
+      console.error("[WhaleFlow] Abortando startWhatsApp devido a erro de dependência prévio.");
+      return;
+  }
+
+  if (!wppconnect) {
+      console.error("[WhaleFlow] WPPConnect não disponível.");
+      status = 'error_dependency';
+      statusMessage = "Erro Crítico: Biblioteca WPPConnect não carregada.";
+      return;
+  }
+
+  if (status === 'initializing_browser' || status === 'open') return;
+
+  status = 'initializing_browser';
+  statusMessage = "Iniciando motor do WhatsApp (Pode demorar na 1ª vez)...";
+  qrCodeData = null;
+  initAttemptCount++;
+  
+  console.log(`[WPP] Iniciando sessão (Tentativa ${initAttemptCount})`);
+
+  // Timeout removido para permitir download do Chrome/QR Code sem interrupção
   
   try {
     wppconnect.create({
-      session: 'flow_session',
+      session: 'default',
+      folderNameToken: SESSION_PATH,
+      puppeteerOptions: {
+        userDataDir: CHROME_DATA_PATH,
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',    
+            '--disable-extensions'
+        ]
+      },
       catchQR: (base64Qr, asciiQR) => {
-        console.log('📷 QR Code gerado pelo WPPConnect');
+        console.log('📷 QR Code gerado');
         qrCodeData = base64Qr; 
-        status = 'connecting';
+        status = 'qr_pending';
+        statusMessage = "QR Code gerado. Aguardando leitura.";
       },
       statusFind: (statusSession, session) => {
         console.log(`📡 Status Sessão: ${statusSession}`);
         
+        if (statusSession === 'browserClose') statusMessage = "Navegador fechou. Reiniciando...";
+        else if (statusSession === 'qrReadFail') statusMessage = "Falha ao ler QR Code.";
+        else if (statusSession === 'autocloseCalled') statusMessage = "Sessão fechada automaticamente.";
+        else if (statusSession === 'isLogged') statusMessage = "Autenticado!";
+        else statusMessage = `Estado: ${statusSession}`;
+
         if (statusSession === 'isLogged' || statusSession === 'inChat') {
           status = 'open';
+          statusMessage = "Conectado e Pronto.";
           qrCodeData = null;
         }
         
@@ -44,31 +129,29 @@ export async function startWhatsApp() {
       useChrome: true,
       debug: false,
       logQR: false,
-      browserArgs: ['--no-sandbox', '--disable-setuid-sandbox'],
       autoClose: 0, 
       disableWelcome: true,
       updatesLog: false,
+      browserArgs: ['--no-sandbox'] 
     })
     .then((wppClient) => {
       client = wppClient;
       status = 'open';
+      statusMessage = "Conectado.";
+      qrCodeData = null;
       console.log('✅ WPPConnect Iniciado e Conectado!');
 
-      // Listener de Mensagens
       client.onMessage((message) => {
         if (!messageHandler || message.isGroupMsg) return;
 
-        // Extrair dados úteis da mensagem
         const remoteJid = message.from;
         let textBody = message.body;
         let selectedId = null;
 
-        // Tratamento para Listas
         if (message.type === 'list_response') {
             selectedId = message.selectedRowId;
             textBody = message.listResponse?.title || message.body;
         }
-        // Fallback para botões antigos
         else if (message.type === 'buttons_response') {
             selectedId = message.selectedButtonId || message.selectedBtnId;
         } 
@@ -84,13 +167,17 @@ export async function startWhatsApp() {
     })
     .catch((error) => {
       console.log("Erro ao iniciar WPPConnect:", error);
-      status = 'close';
-      // Tentar reconectar após delay se falhar no inicio
-      setTimeout(startWhatsApp, 10000);
+      status = 'error_start';
+      statusMessage = "Falha ao iniciar motor: " + error.message;
+      setTimeout(() => {
+          if (status === 'error_start') startWhatsApp();
+      }, 15000);
     });
 
   } catch (e) {
     console.error("Erro fatal WPP:", e);
+    status = 'error_fatal';
+    statusMessage = "Erro Crítico: " + e.message;
   }
 }
 
@@ -101,7 +188,8 @@ export function setMessageHandler(handler) {
 export function getStatusData() {
   return {
     status: status,
-    qrCode: qrCodeData
+    qrCode: qrCodeData,
+    message: statusMessage
   };
 }
 
@@ -112,6 +200,7 @@ export async function logout() {
       client = null;
     }
     status = 'close';
+    statusMessage = "Desconectado.";
     qrCodeData = null;
     setTimeout(startWhatsApp, 3000);
     return { success: true };
@@ -119,8 +208,6 @@ export async function logout() {
     return { success: false, error: e.message };
   }
 }
-
-// --- ENVIO DE MENSAGENS ---
 
 export async function sendTextMessage(to, text) {
   if (!client) return { success: false, error: 'WhatsApp desconectado' };
@@ -140,14 +227,11 @@ export async function sendImageMessage(to, content, caption = '') {
   const id = to.includes('@') ? to : `${to}@c.us`;
   
   try {
-    // Verifica se é Data URI (Base64 do PC) ou URL
     if (content && content.startsWith('data:')) {
-        // WPPConnect sendFile lida com Data URI se passado corretamente como 'content'
         await client.sendFile(id, content, 'imagem.jpg', caption);
     } else {
         await client.sendFile(id, content, 'imagem.jpg', caption);
     }
-    console.log(`[WPP] Imagem enviada para ${to}`);
     return { success: true };
   } catch (error) {
     console.error('Erro WPP Image:', error);
@@ -160,10 +244,7 @@ export async function sendAudioMessage(to, content) {
   const id = to.includes('@') ? to : `${to}@c.us`;
   
   try {
-    // sendPtt envia como nota de voz (microfone)
-    // Suporta URL ou Base64 Data URI
     await client.sendPtt(id, content);
-    console.log(`[WPP] Áudio enviado para ${to}`);
     return { success: true };
   } catch (error) {
     console.error('Erro WPP Audio:', error);
@@ -175,7 +256,6 @@ export async function sendListMessage(to, text, buttonText, sections) {
     if (!client) return { success: false };
     const id = to.includes('@') ? to : `${to}@c.us`;
 
-    // Formato Nativo RIGOROSO para Lista (Menu)
     const listData = [
         {
             title: 'Opções', 
@@ -197,9 +277,7 @@ export async function sendListMessage(to, text, buttonText, sections) {
         });
         return { success: true };
     } catch (e) {
-        console.error("Erro crítico ao enviar lista nativa:", e);
-        
-        // Fallback Texto Formatado
+        console.error("Erro lista:", e);
         const fallbackText = `*${text}*\n\n${sections.map((s, i) => `*${i + 1}.* ${s.label}`).join('\n')}\n\n_Digite o número da opção._`;
         await client.sendText(id, fallbackText);
         return { success: true };

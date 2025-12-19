@@ -1,21 +1,23 @@
+
 import { Node, Edge } from 'reactflow';
 
 export enum NodeType {
   START = 'start',
   MESSAGE = 'message',
   IMAGE = 'image',
-  AUDIO = 'audio', // New
+  AUDIO = 'audio',
   INPUT = 'input',
-  INTERACTIVE = 'interactive', // New (Buttons/List)
+  INTERACTIVE = 'interactive',
   CONDITION = 'condition',
-  SET_VARIABLE = 'set_variable', // New
-  CODE = 'code', // New
+  SET_VARIABLE = 'set_variable',
+  CODE = 'code',
   AI_GEMINI = 'ai_gemini',
   DATABASE_SAVE = 'database_save',
   API_REQUEST = 'api_request',
-  AGENT_HANDOFF = 'agent_handoff', // New
+  AGENT_HANDOFF = 'agent_handoff',
   DELAY = 'delay',
-  WEBHOOK = 'webhook'
+  WEBHOOK = 'webhook',
+  JUMP = 'jump'
 }
 
 export interface NodeOption {
@@ -26,21 +28,28 @@ export interface NodeOption {
 
 export interface NodeData {
   label: string;
-  content?: string; // Text content, prompt, url, or code
-  variable?: string; // Variable name to save input or AI result
-  value?: string; // For Set Variable
-  conditionValue?: string; // For condition nodes
-  options?: NodeOption[]; // For interactive lists or buttons
+  content?: string;
+  variable?: string;
+  value?: string;
+  conditionValue?: string;
+  options?: NodeOption[];
   interactiveType?: 'button' | 'list';
   dbType?: 'json' | 'csv';
-  duration?: number; // For delay
-  systemInstruction?: string; // For Gemini
+  duration?: number;
+  systemInstruction?: string;
   
+  // Jump / Back Specific
+  jumpNodeId?: string;
+
   // API Request Specific
   apiMethod?: string;
   apiUrl?: string;
-  apiHeaders?: string; // JSON string
+  apiHeaders?: string;
   apiBody?: string;
+
+  // Webhook Specific
+  webhookUrl?: string;
+  webhookMethod?: 'POST' | 'GET';
 
   // Trigger Specific (Start Node)
   triggerType?: 'all' | 'keyword_exact' | 'keyword_contains';
@@ -61,6 +70,6 @@ export interface ChatMessage {
   role: 'bot' | 'user' | 'system';
   content: string;
   type?: 'text' | 'image' | 'file' | 'audio' | 'interactive';
-  options?: NodeOption[]; // For interactive messages
+  options?: NodeOption[];
   timestamp: number;
 }
